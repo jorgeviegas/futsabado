@@ -66,7 +66,7 @@ src/
   pages/      Jogos · JogoDetalhe · Jogadores · Peladas · Financeiro · Login · Pendente
   components/ Layout · ui
 supabase/schema.sql   tabelas, RLS, triggers e funções RPC
-scripts/gen-icons.cjs regenera os ícones PNG a partir de public/favicon.svg
+scripts/gen-icons.py regenera logo e ícones PNG a partir de assets/logo-original.webp
 ```
 
 ## Scripts

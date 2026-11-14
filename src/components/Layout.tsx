@@ -8,7 +8,7 @@ export default function Layout() {
   return (
     <div className="app">
       <header className="topo">
-        <img src={`${base}favicon.svg`} alt="" />
+        <img src={`${base}logo.png`} alt="" />
         <h1>FutSábado</h1>
         <span className="muted" style={{ color: '#ffd9df' }}>
           {eu?.apelido || eu?.nome}

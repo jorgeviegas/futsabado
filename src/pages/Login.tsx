@@ -36,7 +36,7 @@ export default function Login() {
   return (
     <div className="centro">
       <form className="login form" onSubmit={enviar}>
-        <img className="logo" src={`${import.meta.env.BASE_URL}favicon.svg`} alt="FutSábado" />
+        <img className="logo" src={`${import.meta.env.BASE_URL}logo.png`} alt="FutSábado" />
         <h1 style={{ textAlign: 'center' }}>FutSábado</h1>
         {!supabaseConfigurado && (
           <p className="erro-msg">Supabase não configurado. Defina VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY (veja o README).</p>

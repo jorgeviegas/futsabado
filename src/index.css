@@ -34,7 +34,7 @@ a { color: inherit; text-decoration: none; }
   background: linear-gradient(135deg, var(--grena), var(--grena-3)); border-bottom: 1px solid #000;
 }
 .topo h1 { flex: 1; }
-.topo img { width: 30px; height: 30px; border-radius: 8px; }
+.topo img { height: 36px; width: auto; }
 .conteudo { flex: 1; padding: 1rem 1rem calc(5.5rem + env(safe-area-inset-bottom)); display: grid; gap: .9rem; align-content: start; }
 .nav {
   position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 720px;
@@ -99,7 +99,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--grena-2); b
 }
 .centro { min-height: 100dvh; display: grid; place-items: center; padding: 1.5rem; }
 .login { width: 100%; max-width: 380px; display: grid; gap: 1rem; }
-.login .logo { width: 84px; height: 84px; margin: 0 auto; border-radius: 22px; }
+.login .logo { height: 140px; width: auto; margin: 0 auto; }
 .spin { width: 28px; height: 28px; border: 3px solid var(--borda); border-top-color: var(--grena-2); border-radius: 50%; animation: gira .8s linear infinite; margin: 2rem auto; }
 @keyframes gira { to { transform: rotate(360deg); } }
 .barra { height: 8px; background: var(--card-2); border-radius: 99px; overflow: hidden; }

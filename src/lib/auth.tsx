@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from './supabase'
@@ -21,15 +21,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient()
   const [session, setSession] = useState<Session | null>(null)
   const [iniciando, setIniciando] = useState(true)
+  const ultimoUsuario = useRef<string | undefined>(undefined)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
+      ultimoUsuario.current = data.session?.user.id
       setSession(data.session)
       setIniciando(false)
     })
     const { data } = supabase.auth.onAuthStateChange((_evento, s) => {
-      setSession(s)
-      qc.clear()
+      // O Supabase reemite eventos (ex.: SIGNED_IN, TOKEN_REFRESHED) quando a aba volta ao foco.
+      // Só descartamos o cache quando o USUÁRIO muda (login/logout); renovar o token não muda nada.
+      const novo = s?.user.id
+      if (novo !== ultimoUsuario.current) {
+        ultimoUsuario.current = novo
+        qc.clear()
+      }
+      setSession((atual) => (atual?.access_token === s?.access_token && atual?.user.id === s?.user.id ? atual : s))
     })
     return () => data.subscription.unsubscribe()
   }, [qc])

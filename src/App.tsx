@@ -15,7 +15,9 @@ import Rankings from './pages/Rankings'
 import Onboarding from './pages/Onboarding'
 
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { staleTime: 15_000, retry: 1, refetchOnWindowFocus: true } },
+  // Dados são considerados frescos por 5 min: trocar de aba rapidamente não gera chamadas.
+  // Ao voltar depois disso, só o que estiver vencido é buscado de novo. Ações do usuário (mutations) invalidam o que mudou.
+  defaultOptions: { queries: { staleTime: 5 * 60_000, retry: 1, refetchOnWindowFocus: true } },
 })
 
 function Rotas() {

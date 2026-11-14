@@ -1,13 +1,18 @@
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
-  useAtualizarJogo, useDefinirPresenca, useExcluirJogo, useJogadores, useJogo, useMeuVoto,
+  useAtualizarJogo, useDefinirPresenca, useExcluirJogo, useJogadores, useJogo, useJogosNoAno, useMeuVoto,
   usePresencas, useResultado, useTotalVotos, useVotar,
 } from '../lib/api'
+import { sortear } from '../lib/sorteio'
+import Escalacao from '../components/Escalacao'
 import { useAuth } from '../lib/auth'
 import { exibir, formatarData, formatarHora } from '../lib/format'
 import { Avatar, Erro, Modal, Spinner } from '../components/ui'
-import type { Jogador, StatusPresenca } from '../lib/types'
+import type { Escalado, Jogador, StatusPresenca } from '../lib/types'
+
+const NOME_TIME = { grena: 'Time Grená', preto: 'Time Preto', empate: 'Empate' } as const
+const NOME_SLOT = { GOL: 'Goleiro', ZAG1: 'Zagueiro', ZAG2: 'Zagueiro', ALA1: 'Ala', ALA2: 'Ala', MEI: 'Meia', ATA: 'Atacante' } as const
 
 const OPCOES: { v: StatusPresenca; rot: string; cls: string }[] = [
   { v: 'confirmado', rot: '✓ Vou', cls: 'ok' },
@@ -26,6 +31,7 @@ export default function JogoDetalhe() {
   const atualizar = useAtualizarJogo()
   const excluir = useExcluirJogo()
   const [editando, setEditando] = useState(false)
+  const { data: jogosAno = {} } = useJogosNoAno()
 
   if (isLoading) return <Spinner />
   if (error || !jogo) return <Erro erro={error ?? new Error('Jogo não encontrado')} />
@@ -37,6 +43,16 @@ export default function JogoDetalhe() {
   const limite = jogo.peladas?.limite_jogadores
   const lotado = Boolean(limite && confirmados.length >= limite && minha !== 'confirmado')
   const agendado = jogo.status === 'agendado'
+
+  function sortearTimes() {
+    if (jogo!.sorteio && !confirm('Já existe um sorteio. Sortear de novo e substituir?')) return
+    const sorteio = sortear(
+      confirmados.map((j) => ({
+        id: j.id, posicao: j.posicao, posicao_secundaria: j.posicao_secundaria, jogosAno: jogosAno[j.id] ?? 0,
+      })),
+    )
+    atualizar.mutate({ id: jogo!.id, sorteio })
+  }
 
   return (
     <>
@@ -54,6 +70,7 @@ export default function JogoDetalhe() {
           {formatarData(jogo.data)} às {formatarHora(jogo.horario)}{jogo.local && ` · ${jogo.local}`}
         </div>
         {jogo.placar && <div>Placar: <strong>{jogo.placar}</strong></div>}
+        {jogo.time_vencedor && <div>Resultado: <strong>{jogo.time_vencedor === 'empate' ? 'Empate' : `Vitória do ${NOME_TIME[jogo.time_vencedor]}`}</strong></div>}
         {jogo.observacoes && <div className="muted">{jogo.observacoes}</div>}
       </div>
 
@@ -81,6 +98,8 @@ export default function JogoDetalhe() {
       {talvez.length > 0 && <Lista titulo={`Talvez (${talvez.length})`} lista={talvez} />}
       {ausentes.length > 0 && <Lista titulo={`Não vão (${ausentes.length})`} lista={ausentes} />}
 
+      {jogo.sorteio && <Times jogo={jogo} jogadores={jogadores} jogosAno={jogosAno} />}
+
       {jogo.status === 'realizado' || jogo.votacao_aberta ? (
         <Votacao jogoId={jogo.id} aberta={jogo.votacao_aberta} confirmados={confirmados} />
       ) : null}
@@ -90,6 +109,14 @@ export default function JogoDetalhe() {
           <h2>Administração</h2>
           <div className="linha wrap">
             <button className="btn sec peq" onClick={() => setEditando(true)}>✏️ Editar jogo</button>
+            {jogo.status !== 'cancelado' && (
+              <button className="btn peq" disabled={confirmados.length < 2 || atualizar.isPending} onClick={sortearTimes}>
+                🎲 {jogo.sorteio ? 'Sortear de novo' : 'Sortear times'}
+              </button>
+            )}
+            {jogo.sorteio && (
+              <button className="btn sec peq" onClick={() => confirm('Remover o sorteio?') && atualizar.mutate({ id: jogo.id, sorteio: null })}>Limpar sorteio</button>
+            )}
             {agendado && (
               <button className="btn sec peq" onClick={() => atualizar.mutate({ id: jogo.id, status: 'cancelado' })}>🚫 Cancelar</button>
             )}
@@ -135,7 +162,7 @@ function Lista({ titulo, lista }: { titulo: string; lista: Jogador[] }) {
       {lista.length === 0 && <span className="muted">Ninguém ainda.</span>}
       {lista.map((j) => (
         <div className="linha" key={j.id}>
-          <Avatar nome={exibir(j)} />
+          <Avatar nome={exibir(j)} numero={j.numero_camisa} />
           <span className="grow">{exibir(j)}</span>
           {j.tipo === 'avulso' && <span className="chip">avulso</span>}
         </div>
@@ -205,7 +232,7 @@ function Votacao({ jogoId, aberta, confirmados }: { jogoId: string; aberta: bool
               disabled={votar.isPending}
               onClick={() => votar.mutate({ jogo_id: jogoId, eleitor_id: eu.id, votado_id: j.id })}
             >
-              <Avatar nome={exibir(j)} />
+              <Avatar nome={exibir(j)} numero={j.numero_camisa} />
               <span className="grow">{exibir(j)}</span>
               {meuVoto?.votado_id === j.id && <span>✓</span>}
             </button>
@@ -248,6 +275,7 @@ function EditarJogo({ jogo, onFechar }: { jogo: NonNullable<ReturnType<typeof us
   const atualizar = useAtualizarJogo()
   const [f, setF] = useState({
     data: jogo.data, horario: jogo.horario.slice(0, 5), local: jogo.local ?? '', placar: jogo.placar ?? '', observacoes: jogo.observacoes ?? '',
+    time_vencedor: jogo.time_vencedor ?? '',
   })
   return (
     <Modal titulo="Editar jogo" onFechar={onFechar}>
@@ -256,7 +284,10 @@ function EditarJogo({ jogo, onFechar }: { jogo: NonNullable<ReturnType<typeof us
         onSubmit={(e) => {
           e.preventDefault()
           atualizar.mutate(
-            { id: jogo.id, ...f, local: f.local || null, placar: f.placar || null, observacoes: f.observacoes || null },
+            {
+              id: jogo.id, ...f, local: f.local || null, placar: f.placar || null, observacoes: f.observacoes || null,
+              time_vencedor: (f.time_vencedor || null) as typeof jogo.time_vencedor,
+            },
             { onSuccess: onFechar },
           )
         }}
@@ -267,10 +298,74 @@ function EditarJogo({ jogo, onFechar }: { jogo: NonNullable<ReturnType<typeof us
         </div>
         <label>Local<input value={f.local} onChange={(e) => setF({ ...f, local: e.target.value })} /></label>
         <label>Placar<input value={f.placar} placeholder="Ex.: Grená 5 x 4 Preto" onChange={(e) => setF({ ...f, placar: e.target.value })} /></label>
+        <label>Time vencedor
+          <select value={f.time_vencedor} onChange={(e) => setF({ ...f, time_vencedor: e.target.value as typeof f.time_vencedor })}>
+            <option value="">— não informado —</option>
+            <option value="grena">Time Grená</option>
+            <option value="preto">Time Preto</option>
+            <option value="empate">Empate</option>
+          </select>
+        </label>
         <label>Observações<textarea rows={2} value={f.observacoes} onChange={(e) => setF({ ...f, observacoes: e.target.value })} /></label>
         <Erro erro={atualizar.error} />
         <button className="btn" disabled={atualizar.isPending}>Salvar</button>
       </form>
     </Modal>
+  )
+}
+
+function Times({ jogo, jogadores, jogosAno }: { jogo: NonNullable<ReturnType<typeof useJogo>['data']>; jogadores: Jogador[]; jogosAno: Record<string, number> }) {
+  const sorteio = jogo.sorteio!
+  const por = new Map(jogadores.map((j) => [j.id, j]))
+  const venceu = jogo.time_vencedor
+
+  return (
+    <div className="card">
+      <h2>🎲 Times sorteados</h2>
+      <Escalacao sorteio={sorteio} jogadores={jogadores} />
+      <p className="muted">Formação 2-3-1. Contorno tracejado = jogando fora da posição.</p>
+      <TimeLista cor="grena" lista={sorteio.grena} por={por} venceu={venceu} />
+      <TimeLista cor="preto" lista={sorteio.preto} por={por} venceu={venceu} />
+      {sorteio.reservas.length > 0 && (
+        <div style={{ display: 'grid', gap: '.4rem' }}>
+          <h3>Reservas ({sorteio.reservas.length})</h3>
+          <p className="muted">Mais de 14 confirmados: entra primeiro quem tem mais jogos no ano.</p>
+          {sorteio.reservas.map((id) => {
+            const j = por.get(id)
+            return (
+              <div className="linha" key={id}>
+                <Avatar nome={j ? exibir(j) : '?'} numero={j?.numero_camisa} />
+                <span className="grow">{j ? exibir(j) : '—'}</span>
+                <span className="chip">{jogosAno[id] ?? 0} {(jogosAno[id] ?? 0) === 1 ? 'jogo' : 'jogos'} no ano</span>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TimeLista({ cor, lista, por, venceu }: {
+  cor: 'grena' | 'preto'; lista: Escalado[]; por: Map<string, Jogador>; venceu: string | null
+}) {
+  return (
+    <div style={{ display: 'grid', gap: '.4rem' }}>
+      <div className="time-cab">
+        <span className={`bolinha ${cor}`} />
+        <h3>{NOME_TIME[cor]} ({lista.length}){venceu === cor && ' 🏆'}</h3>
+      </div>
+      {lista.map((e) => {
+        const j = por.get(e.id)
+        return (
+          <div className="linha" key={e.id}>
+            <span className="pos-tag">{NOME_SLOT[e.slot].slice(0, 3).toUpperCase()}</span>
+            <Avatar nome={j ? exibir(j) : '?'} numero={j?.numero_camisa} />
+            <span className="grow">{j ? exibir(j) : '—'}</span>
+            {e.fora && <span className="chip fora" title="Fora da posição preferida">fora de posição</span>}
+          </div>
+        )
+      })}
+    </div>
   )
 }

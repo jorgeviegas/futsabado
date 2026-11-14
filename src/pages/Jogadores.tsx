@@ -3,6 +3,7 @@ import { useExcluirJogador, useJogadores, useSalvarJogador } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { POSICOES, exibir } from '../lib/format'
 import { Avatar, Erro, Modal, Spinner } from '../components/ui'
+import CampoPosicoes from '../components/CampoPosicoes'
 import type { Jogador } from '../lib/types'
 
 export default function Jogadores() {
@@ -54,11 +55,15 @@ function Linha({ j, euId, admin, onEditar }: { j: Jogador; euId?: string; admin:
   return (
     <div className="card link" onClick={podeEditar ? onEditar : undefined}>
       <div className="linha">
-        <Avatar nome={exibir(j)} />
+        <Avatar nome={exibir(j)} numero={j.numero_camisa} />
         <div className="grow">
           <strong>{exibir(j)}</strong>
           {j.apelido && <span className="muted"> · {j.nome}</span>}
-          <div className="muted">{j.posicao ? POSICOES[j.posicao] : 'Sem posição'}{admin && j.telefone ? ` · ${j.telefone}` : ''}</div>
+          <div className="muted">
+            {j.posicao ? POSICOES[j.posicao] : 'Sem posição'}
+            {j.posicao_secundaria && ` / ${POSICOES[j.posicao_secundaria]}`}
+            {admin && j.telefone ? ` · ${j.telefone}` : ''}
+          </div>
         </div>
         {j.is_admin && <span className="chip grena">admin</span>}
         <span className="chip">{j.tipo}</span>
@@ -68,11 +73,12 @@ function Linha({ j, euId, admin, onEditar }: { j: Jogador; euId?: string; admin:
 }
 
 function Form({ inicial, admin, onFechar }: { inicial: Partial<Jogador>; admin: boolean; onFechar: () => void }) {
+  const { eu } = useAuth()
   const salvar = useSalvarJogador()
   const excluir = useExcluirJogador()
   const [f, setF] = useState({
     nome: inicial.nome ?? '', apelido: inicial.apelido ?? '', email: inicial.email ?? '', telefone: inicial.telefone ?? '',
-    posicao: inicial.posicao ?? '', tipo: inicial.tipo ?? 'mensalista', is_admin: inicial.is_admin ?? false, ativo: inicial.ativo ?? true,
+    posicao: inicial.posicao ?? null, posicao_secundaria: inicial.posicao_secundaria ?? null, camisa: inicial.numero_camisa?.toString() ?? '', tipo: inicial.tipo ?? 'mensalista', is_admin: inicial.is_admin ?? false, ativo: inicial.ativo ?? true,
   })
   const novo = !inicial.id
 
@@ -84,7 +90,9 @@ function Form({ inicial, admin, onFechar }: { inicial: Partial<Jogador>; admin: 
           e.preventDefault()
           const base = {
             id: inicial.id, nome: f.nome.trim(), apelido: f.apelido.trim() || null,
-            telefone: f.telefone.trim() || null, posicao: (f.posicao || null) as Jogador['posicao'],
+            telefone: f.telefone.trim() || null, posicao: f.posicao, posicao_secundaria: f.posicao_secundaria,
+            numero_camisa: f.camisa ? Number(f.camisa) : null,
+            ...(inicial.id && inicial.id === eu?.id ? { perfil_completo: true } : {}),
           }
           const extra = admin
             ? { email: f.email.trim().toLowerCase() || null, tipo: f.tipo, is_admin: f.is_admin, ativo: f.ativo }
@@ -101,22 +109,22 @@ function Form({ inicial, admin, onFechar }: { inicial: Partial<Jogador>; admin: 
           </label>
         )}
         <label>Telefone<input type="tel" value={f.telefone} onChange={(e) => setF({ ...f, telefone: e.target.value })} /></label>
-        <div className="grid2">
-          <label>Posição
-            <select value={f.posicao} onChange={(e) => setF({ ...f, posicao: e.target.value as never })}>
-              <option value="">—</option>
-              {Object.entries(POSICOES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+        <label>Número da camisa (fixo, opcional)
+          <input type="number" inputMode="numeric" min={1} max={99} value={f.camisa} onChange={(e) => setF({ ...f, camisa: e.target.value })} />
+        </label>
+        <CampoPosicoes
+          primaria={f.posicao}
+          secundaria={f.posicao_secundaria}
+          onChange={(v) => setF({ ...f, posicao: v.primaria, posicao_secundaria: v.secundaria })}
+        />
+        {admin && (
+          <label>Tipo
+            <select value={f.tipo} onChange={(e) => setF({ ...f, tipo: e.target.value as never })}>
+              <option value="mensalista">Mensalista</option>
+              <option value="avulso">Avulso</option>
             </select>
           </label>
-          {admin && (
-            <label>Tipo
-              <select value={f.tipo} onChange={(e) => setF({ ...f, tipo: e.target.value as never })}>
-                <option value="mensalista">Mensalista</option>
-                <option value="avulso">Avulso</option>
-              </select>
-            </label>
-          )}
-        </div>
+        )}
         {admin && (
           <>
             <label className="linha"><input type="checkbox" style={{ width: 'auto' }} checked={f.ativo} onChange={(e) => setF({ ...f, ativo: e.target.checked })} /> Ativo</label>

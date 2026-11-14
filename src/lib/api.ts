@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from './supabase'
 import { hojeISO, somaMeses } from './format'
 import type {
-  Jogador, Jogo, Pagamento, Pelada, Presenca, RankingCraque, ResultadoVotacao, StatusPresenca, Voto,
+  Jogador, Jogo, Pagamento, Pelada, Presenca, RankingCraque, RankingVencedor, ResultadoVotacao, StatusPresenca, Voto,
 } from './types'
 
 function ok<T>(r: { data: T; error: { message: string } | null }): T {
@@ -103,7 +103,7 @@ export const useAtualizarJogo = () =>
       const { id, peladas: _p, ...resto } = j
       return ok(await supabase.from('jogos').update(resto).eq('id', id))
     },
-    [['jogos'], ['jogo'], ['ranking'], ['resultado']],
+    [['jogos'], ['jogo'], ['ranking'], ['resultado'], ['jogosNoAno']],
   )
 
 export const useExcluirJogo = () =>
@@ -187,11 +187,28 @@ export const useTotalVotos = (jogoId: string | undefined) =>
     queryFn: async () => Number(ok(await supabase.rpc('total_votos', { p_jogo_id: jogoId! }))),
   })
 
-export const useRanking = () =>
+export const useRankingCraques = (limite = 5) =>
   useQuery({
-    queryKey: ['ranking'],
+    queryKey: ['ranking', 'craques', limite],
     queryFn: async () =>
-      ok(await supabase.rpc('ranking_craques', { p_limite: 10 })) as RankingCraque[],
+      ok(await supabase.rpc('ranking_craques', { p_limite: limite })) as RankingCraque[],
+  })
+
+export const useRankingVencedores = (limite = 5) =>
+  useQuery({
+    queryKey: ['ranking', 'vencedores', limite],
+    queryFn: async () =>
+      ok(await supabase.rpc('ranking_vencedores', { p_limite: limite })) as RankingVencedor[],
+  })
+
+/** Jogos realizados no ano em que cada jogador esteve presente (desempate do sorteio). */
+export const useJogosNoAno = () =>
+  useQuery({
+    queryKey: ['jogosNoAno'],
+    queryFn: async () => {
+      const rows = ok(await supabase.rpc('jogos_no_ano')) as { jogador_id: string; jogos: number }[]
+      return Object.fromEntries(rows.map((r) => [r.jogador_id, Number(r.jogos)])) as Record<string, number>
+    },
   })
 
 // ---------- Financeiro ----------

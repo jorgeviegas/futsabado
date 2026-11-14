@@ -22,6 +22,7 @@ export default function Layout() {
       <nav className="nav" aria-label="Navegação principal">
         <NavLink to="/" end><span>⚽</span><span>Jogos</span></NavLink>
         <NavLink to="/jogadores"><span>👥</span><span>Elenco</span></NavLink>
+        <NavLink to="/rankings"><span>🏆</span><span>Rankings</span></NavLink>
         <NavLink to="/financeiro"><span>💰</span><span>Financeiro</span></NavLink>
         {isAdmin && <NavLink to="/peladas"><span>📅</span><span>Peladas</span></NavLink>}
       </nav>

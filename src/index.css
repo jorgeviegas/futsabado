@@ -106,3 +106,18 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--grena-2); b
 .barra > div { height: 100%; background: var(--grena-2); }
 .voto-opcao { display: flex; align-items: center; gap: .6rem; padding: .55rem; border-radius: 10px; border: 1px solid var(--borda); background: var(--card-2); cursor: pointer; width: 100%; text-align: left; }
 .voto-opcao.sel { border-color: var(--grena-2); background: var(--grena-3); }
+
+/* Camisa / seletor de posição / escalação */
+.avatar.num { background: linear-gradient(160deg, var(--grena-2), var(--grena-3)); border: 2px solid #ffffff40; font-size: .95rem; letter-spacing: -.5px; }
+.campo { width: 100%; max-width: 300px; margin: 0 auto; display: block; touch-action: manipulation; }
+.campo .zona { cursor: pointer; outline: none; }
+.campo .zona rect { transition: fill .15s, stroke .15s; }
+.campo .zona:focus-visible rect { stroke: #fff; stroke-width: 2.5; }
+.campo text { pointer-events: none; font-family: inherit; }
+.escalacao { width: 100%; max-width: 420px; margin: 0 auto; display: block; border-radius: 12px; }
+.escalacao text { font-family: inherit; }
+.time-cab { display: flex; align-items: center; gap: .5rem; }
+.time-cab .bolinha { width: 14px; height: 14px; border-radius: 50%; border: 2px solid #fff; flex: none; }
+.bolinha.grena { background: var(--grena-2); } .bolinha.preto { background: #000; }
+.pos-tag { font-size: .7rem; color: var(--texto-2); min-width: 2.2rem; }
+.chip.fora { color: var(--aviso); border-color: var(--aviso); }

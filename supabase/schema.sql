@@ -98,6 +98,31 @@ create unique index if not exists pagamentos_avulso_uk
   on public.pagamentos (jogador_id, jogo_id) where tipo = 'avulso';
 
 -- ---------------------------------------------------------------------
+-- EVOLUÇÕES (v2): posição secundária, camisa, sorteio de times e vencedor
+-- (idempotente: seguro rodar em bancos novos ou já existentes)
+-- ---------------------------------------------------------------------
+alter table public.jogadores add column if not exists posicao_secundaria text;
+alter table public.jogadores add column if not exists numero_camisa smallint;
+alter table public.jogadores add column if not exists perfil_completo boolean not null default false;
+
+alter table public.jogadores drop constraint if exists jogadores_posicao_sec_check;
+alter table public.jogadores add constraint jogadores_posicao_sec_check
+  check (posicao_secundaria is null or posicao_secundaria in ('goleiro','zagueiro','ala','meia','atacante'));
+alter table public.jogadores drop constraint if exists jogadores_camisa_check;
+alter table public.jogadores add constraint jogadores_camisa_check
+  check (numero_camisa is null or numero_camisa between 1 and 99);
+-- numeração fixa: cada número pertence a um único jogador
+create unique index if not exists jogadores_numero_camisa_uk
+  on public.jogadores (numero_camisa) where numero_camisa is not null;
+
+-- sorteio: {"grena":[{"id","slot","fora"}], "preto":[...], "reservas":[ids], "gerado_em"}
+alter table public.jogos add column if not exists sorteio jsonb;
+alter table public.jogos add column if not exists time_vencedor text;
+alter table public.jogos drop constraint if exists jogos_time_vencedor_check;
+alter table public.jogos add constraint jogos_time_vencedor_check
+  check (time_vencedor is null or time_vencedor in ('grena','preto','empate'));
+
+-- ---------------------------------------------------------------------
 -- FUNÇÕES AUXILIARES (usadas nas políticas RLS)
 -- ---------------------------------------------------------------------
 
@@ -434,16 +459,61 @@ begin
 end;
 $$;
 
+-- Maiores vencedores: vitórias de cada jogador em jogos sorteados e realizados.
+create or replace function public.ranking_vencedores(p_limite int default 5)
+returns table (jogador_id uuid, nome text, apelido text, vitorias bigint)
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.is_membro() then
+    raise exception 'Acesso negado';
+  end if;
+  return query
+    select j.id, j.nome, j.apelido, count(*)::bigint
+      from public.jogos g
+      cross join lateral jsonb_array_elements(g.sorteio -> g.time_vencedor) e
+      join public.jogadores j on j.id = (e ->> 'id')::uuid
+     where g.status = 'realizado'
+       and g.time_vencedor in ('grena', 'preto')
+       and g.sorteio is not null
+     group by j.id, j.nome, j.apelido
+     order by count(*) desc, j.nome
+     limit p_limite;
+end;
+$$;
+
+-- Jogos realizados em que cada jogador confirmou presença no ano (desempate do sorteio).
+create or replace function public.jogos_no_ano(p_ano int default null)
+returns table (jogador_id uuid, jogos bigint)
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.is_membro() then
+    raise exception 'Acesso negado';
+  end if;
+  return query
+    select p.jogador_id, count(*)::bigint
+      from public.presencas p
+      join public.jogos g on g.id = p.jogo_id
+     where p.status = 'confirmado'
+       and g.status = 'realizado'
+       and extract(year from g.data)::int = coalesce(p_ano, extract(year from now())::int)
+     group by p.jogador_id;
+end;
+$$;
+
 -- Permissões de execução das funções
 revoke execute on function public.gerar_jogos(uuid, int) from public, anon;
 revoke execute on function public.resultado_votacao(uuid) from public, anon;
 revoke execute on function public.total_votos(uuid) from public, anon;
 revoke execute on function public.ranking_craques(int) from public, anon;
+revoke execute on function public.ranking_vencedores(int) from public, anon;
+revoke execute on function public.jogos_no_ano(int) from public, anon;
 revoke execute on function public.marcar_pagamento(uuid, text, date, uuid, numeric, boolean) from public, anon;
 grant execute on function public.gerar_jogos(uuid, int) to authenticated;
 grant execute on function public.resultado_votacao(uuid) to authenticated;
 grant execute on function public.total_votos(uuid) to authenticated;
 grant execute on function public.ranking_craques(int) to authenticated;
+grant execute on function public.ranking_vencedores(int) to authenticated;
+grant execute on function public.jogos_no_ano(int) to authenticated;
 grant execute on function public.marcar_pagamento(uuid, text, date, uuid, numeric, boolean) to authenticated;
 
 -- ---------------------------------------------------------------------

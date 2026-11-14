@@ -11,6 +11,9 @@ export interface Jogador {
   email: string | null
   telefone: string | null
   posicao: Posicao | null
+  posicao_secundaria: Posicao | null
+  numero_camisa: number | null
+  perfil_completo: boolean
   tipo: TipoJogador
   is_admin: boolean
   ativo: boolean
@@ -28,6 +31,23 @@ export interface Pelada {
   ativa: boolean
 }
 
+export type Slot = 'GOL' | 'ZAG1' | 'ZAG2' | 'ALA1' | 'MEI' | 'ALA2' | 'ATA'
+export type TimeCor = 'grena' | 'preto'
+
+export interface Escalado {
+  id: string
+  slot: Slot
+  /** Jogando fora da posição (primária e secundária não bateram). */
+  fora: boolean
+}
+
+export interface Sorteio {
+  grena: Escalado[]
+  preto: Escalado[]
+  reservas: string[]
+  gerado_em: string
+}
+
 export interface Jogo {
   id: string
   pelada_id: string
@@ -37,6 +57,8 @@ export interface Jogo {
   status: StatusJogo
   votacao_aberta: boolean
   placar: string | null
+  sorteio: Sorteio | null
+  time_vencedor: TimeCor | 'empate' | null
   observacoes: string | null
   peladas?: Pick<Pelada, 'nome' | 'limite_jogadores' | 'valor_avulso'> | null
 }
@@ -76,4 +98,11 @@ export interface RankingCraque {
   nome: string
   apelido: string | null
   premios: number
+}
+
+export interface RankingVencedor {
+  jogador_id: string
+  nome: string
+  apelido: string | null
+  vitorias: number
 }

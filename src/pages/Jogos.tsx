@@ -1,25 +1,27 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useConfirmadosPorJogo, useJogos, useRanking } from '../lib/api'
+import { useConfirmadosPorJogo, useJogos } from '../lib/api'
 import { useAuth } from '../lib/auth'
-import { exibir, formatarData, formatarHora } from '../lib/format'
+import { formatarData, formatarHora } from '../lib/format'
 import { Erro, Spinner, Vazio } from '../components/ui'
 import type { Jogo } from '../lib/types'
 
-type Aba = 'proximos' | 'passados' | 'craques'
+const NOME_TIME: Record<string, string> = { grena: 'Vitória Grená', preto: 'Vitória Preto', empate: 'Empate' }
+
+type Aba = 'proximos' | 'passados'
 
 export default function Jogos() {
   const [aba, setAba] = useState<Aba>('proximos')
   return (
     <>
       <div className="seg" role="tablist">
-        {(['proximos', 'passados', 'craques'] as const).map((a) => (
+        {(['proximos', 'passados'] as const).map((a) => (
           <button key={a} role="tab" className={aba === a ? 'ativo' : ''} onClick={() => setAba(a)}>
-            {{ proximos: 'Próximos', passados: 'Resultados', craques: '🏆 Craques' }[a]}
+            {{ proximos: 'Próximos', passados: 'Resultados' }[a]}
           </button>
         ))}
       </div>
-      {aba === 'craques' ? <Craques /> : <Lista filtro={aba} />}
+      <Lista filtro={aba} />
     </>
   )
 }
@@ -56,7 +58,7 @@ function CartaoJogo({ jogo, confirmados, minha }: { jogo: Jogo; confirmados: num
       <div className="linha entre">
         <h3>{jogo.peladas?.nome ?? 'Pelada'}</h3>
         {jogo.status === 'cancelado' && <span className="chip erro">Cancelado</span>}
-        {jogo.status === 'realizado' && <span className="chip">{jogo.placar || 'Realizado'}</span>}
+        {jogo.status === 'realizado' && <span className="chip">{jogo.placar || NOME_TIME[jogo.time_vencedor ?? ''] || 'Realizado'}</span>}
         {jogo.status === 'agendado' && minha === 'confirmado' && <span className="chip ok">Confirmado ✓</span>}
         {jogo.status === 'agendado' && minha === 'talvez' && <span className="chip aviso">Talvez</span>}
         {jogo.status === 'agendado' && minha === 'ausente' && <span className="chip erro">Ausente</span>}
@@ -71,24 +73,5 @@ function CartaoJogo({ jogo, confirmados, minha }: { jogo: Jogo; confirmados: num
         {jogo.votacao_aberta && ' · 🗳️ votação aberta'}
       </div>
     </Link>
-  )
-}
-
-function Craques() {
-  const { data, isLoading, error } = useRanking()
-  if (isLoading) return <Spinner />
-  if (error) return <Erro erro={error} />
-  if (!data?.length) return <Vazio>Ainda não há craques. O ranking aparece após a primeira votação encerrada.</Vazio>
-  return (
-    <div className="card">
-      <h2>Ranking de craques</h2>
-      {data.map((r, i) => (
-        <div className="linha" key={r.jogador_id}>
-          <strong style={{ width: 28 }}>{['🥇', '🥈', '🥉'][i] ?? `${i + 1}º`}</strong>
-          <span className="grow">{exibir(r)}</span>
-          <span className="chip grena">{r.premios} {r.premios === 1 ? 'vez' : 'vezes'}</span>
-        </div>
-      ))}
-    </div>
   )
 }

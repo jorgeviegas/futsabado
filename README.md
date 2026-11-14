@@ -48,13 +48,28 @@ O `BASE_PATH` é definido automaticamente pelo workflow com o nome do repositór
 
 Abra a URL no celular → Chrome: **Instalar app / Adicionar à tela inicial** · iPhone (Safari): **Compartilhar → Adicionar à Tela de Início**.
 
+## Posições, camisa e sorteio (fut7)
+
+- No **primeiro login** o jogador escolhe a posição primária e a secundária tocando numa quadra em miniatura
+  (Goleiro, Zagueiro, Ala, Meia, Atacante) e pode informar o **número da camisa** (fixo: não repete entre jogadores).
+  Onde há camisa, o Elenco mostra o número no lugar das iniciais.
+- **Sorteio** (admin, na tela do jogo): divide os confirmados em *Time Grená* e *Time Preto* equilibrando as posições
+  e monta a escalação 2-3-1 num diagrama tático. Cada vaga usa a posição primária, depois a secundária; quem sobrar
+  joga fora de posição (marcado em amarelo).
+- Com **mais de 14 confirmados**, entra primeiro quem tem **mais jogos no ano** (desempate aleatório). Para inverter
+  (rodízio, quem jogou menos entra primeiro), troque `PRIORIDADE_PARA_QUEM_MAIS_JOGOU` em `src/lib/sorteio.ts`.
+- **Rankings** (aba própria): top 5 de craques e top 5 de maiores vencedores. Vitórias contam em jogos sorteados em que
+  o admin informou o *time vencedor* (Editar jogo).
+
+> Se você já tinha rodado o `schema.sql` antes, rode-o de novo: ele é idempotente e aplica as novas colunas e funções.
+
 ## Fluxo de uso
 
 1. **Peladas** (admin): crie “Pelada de Sábado” (dia, horário, local, limite, valores) e toque em *Gerar próximas 4 semanas*.
    Opcional: agende a geração automática semanal com `pg_cron` (exemplo comentado no fim do `schema.sql`).
 2. **Jogos**: cada jogador responde *Vou / Talvez / Não vou*. O limite de jogadores é respeitado.
 3. Após a partida, o admin toca em **Encerrar e abrir votação**; confirmados votam no craque (voto secreto).
-   O admin encerra a votação e o resultado aparece para todos. O ranking de craques fica na aba *🏆 Craques*.
+   O admin encerra a votação e o resultado aparece para todos. O ranking de craques fica na aba *Rankings*.
 4. **Financeiro**: mensalistas têm uma cobrança por mês; avulsos, uma por jogo em que confirmaram.
    O admin marca *pago* com um toque; cada jogador vê apenas a própria situação.
 

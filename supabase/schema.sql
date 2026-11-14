@@ -16,12 +16,19 @@ create table if not exists public.jogadores (
   apelido     text,
   email       text unique,
   telefone    text,
-  posicao     text check (posicao in ('goleiro','zagueiro','lateral','meio','atacante')),
+  posicao     text check (posicao in ('goleiro','zagueiro','ala','meia','atacante')),
   tipo        text not null default 'mensalista' check (tipo in ('mensalista','avulso')),
   is_admin    boolean not null default false,
   ativo       boolean not null default true,
   created_at  timestamptz not null default now()
 );
+
+-- Migração (fut7): ajusta posições em bancos criados antes desta versão.
+alter table public.jogadores drop constraint if exists jogadores_posicao_check;
+update public.jogadores set posicao = 'ala'  where posicao = 'lateral';
+update public.jogadores set posicao = 'meia' where posicao = 'meio';
+alter table public.jogadores add constraint jogadores_posicao_check
+  check (posicao in ('goleiro','zagueiro','ala','meia','atacante'));
 
 -- Peladas recorrentes (ex.: "Pelada de sábado", todo sábado às 8h).
 create table if not exists public.peladas (

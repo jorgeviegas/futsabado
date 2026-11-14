@@ -1,4 +1,4 @@
-export type Posicao = 'goleiro' | 'zagueiro' | 'lateral' | 'meio' | 'atacante'
+export type Posicao = 'goleiro' | 'zagueiro' | 'ala' | 'meia' | 'atacante'
 export type TipoJogador = 'mensalista' | 'avulso'
 export type StatusPresenca = 'confirmado' | 'talvez' | 'ausente'
 export type StatusJogo = 'agendado' | 'realizado' | 'cancelado'

@@ -3,8 +3,8 @@ export const DIAS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'
 export const POSICOES: Record<string, string> = {
   goleiro: 'Goleiro',
   zagueiro: 'Zagueiro',
-  lateral: 'Lateral',
-  meio: 'Meio-campo',
+  ala: 'Ala',
+  meia: 'Meia',
   atacante: 'Atacante',
 }
 

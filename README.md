@@ -75,6 +75,24 @@ Abra a URL no celular → Chrome: **Instalar app / Adicionar à tela inicial** �
   fica devendo o valor daquele jogo. Mensalistas pagam a mensalidade.
 - Todo jogador novo entra como **avulso**; apenas administradores alteram para mensalista.
 
+## Jogos, convidados e caixa
+
+- **Aba Jogos:** mostra só o *próximo jogo* e o *jogo anterior*. **Resultados** lista os jogos realizados com o placar
+  no formato "Branco 5 x 9 Preto". O admin registra o placar em *Editar jogo*.
+- **Confirmação de presença:** abre N dias depois do jogo anterior (configurável na pelada; padrão 2 = segunda-feira
+  para jogos de sábado). Antes disso o jogador vê a data de abertura; admins confirmam a qualquer momento.
+  O aviso "Confirme sua presença" só aparece quando a confirmação abre.
+- **Votação do craque automática:** ao abrir o app, jogos que já passaram (com confirmados) viram *realizados* e a
+  votação abre sozinha; registrar o placar também marca o jogo como realizado e abre a votação. Antes disso, o admin
+  pode remover quem **não compareceu** ("Quem não compareceu?" na tela do jogo): some do sorteio, da cobrança, da
+  votação e do ranking de assiduidade. O admin encerra a votação para revelar o craque.
+- **Convidados:** qualquer jogador convida um avulso (nome e posição opcional) enquanto o jogo está agendado. O
+  convidado ocupa vaga, entra no sorteio e paga o mesmo valor; quem convidou fica responsável pelo pagamento.
+- **Financeiro:** todos veem o *Caixa do time* (saldo, entradas e saídas) em somente leitura e as próprias pendências.
+  Admins têm ainda *Cobranças* (confirmar/desfazer pagamentos de todos, de qualquer mês do ano) e *Lançar* (entradas e
+  saídas avulsas). Pagamentos confirmados entram no caixa automaticamente.
+- **Rankings:** top 5 de craques, de maiores vencedores e de **assiduidade** (mais presenças no ano).
+
 ## Fluxo de uso
 
 1. **Peladas** (admin): crie “Pelada de Sábado” (dia, horário, local, limite, valores) e toque em *Gerar próximas 4 semanas*.

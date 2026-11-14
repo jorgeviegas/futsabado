@@ -1,6 +1,7 @@
 export type Posicao = 'goleiro' | 'zagueiro' | 'ala' | 'meia' | 'atacante'
 export type TipoJogador = 'mensalista' | 'avulso'
-export type StatusPresenca = 'confirmado' | 'talvez' | 'ausente'
+/** 'faltou' = confirmou, mas não compareceu (marcado pelo admin). */
+export type StatusPresenca = 'confirmado' | 'talvez' | 'ausente' | 'faltou'
 export type StatusJogo = 'agendado' | 'realizado' | 'cancelado'
 
 export interface Jogador {
@@ -17,6 +18,7 @@ export interface Jogador {
   tipo: TipoJogador
   is_admin: boolean
   ativo: boolean
+  created_at: string
 }
 
 export interface Pelada {
@@ -28,6 +30,8 @@ export interface Pelada {
   limite_jogadores: number | null
   valor_mensalidade: number
   valor_avulso: number
+  /** Dias após o jogo anterior em que a confirmação de presença abre (2 = segunda, para jogos de sábado). */
+  liberar_confirmacao_dias: number
   ativa: boolean
 }
 
@@ -57,6 +61,9 @@ export interface Jogo {
   status: StatusJogo
   votacao_aberta: boolean
   placar: string | null
+  placar_branco: number | null
+  placar_preto: number | null
+  votacao_iniciada_em: string | null
   /** Valor individual cobrado de cada jogador que jogou. */
   valor: number | null
   sorteio: Sorteio | null
@@ -81,10 +88,13 @@ export interface Voto {
   votado_id: string
 }
 
+export type TipoPagamento = 'mensalidade' | 'avulso' | 'convidado'
+
 export interface Pagamento {
   id: string
   jogador_id: string
-  tipo: 'mensalidade' | 'avulso'
+  tipo: TipoPagamento
+  convidado_id: string | null
   competencia: string
   jogo_id: string | null
   valor: number
@@ -111,4 +121,42 @@ export interface RankingVencedor {
   nome: string
   apelido: string | null
   vitorias: number
+}
+
+export interface Convidado {
+  id: string
+  jogo_id: string
+  convidado_por: string
+  nome: string
+  posicao: Posicao | null
+}
+
+export interface Lancamento {
+  id: string
+  tipo: 'entrada' | 'saida'
+  descricao: string
+  valor: number
+  data: string
+}
+
+/** Linha do extrato do caixa (pagamentos recebidos + lançamentos avulsos). */
+export interface ExtratoItem {
+  id: string
+  data: string
+  tipo: 'entrada' | 'saida'
+  descricao: string
+  valor: number
+}
+
+export interface ResumoCaixa {
+  entradas: number
+  saidas: number
+}
+
+export interface RankingAssiduo {
+  jogador_id: string
+  nome: string
+  apelido: string | null
+  presencas: number
+  total_jogos: number
 }

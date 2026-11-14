@@ -46,6 +46,8 @@ begin
   -- Dados do jogo (a ordem não importa: o CASCADE cuida das dependências)
   truncate table
     public.votos,
+    public.convidados,
+    public.caixa_lancamentos,
     public.presencas,
     public.pagamentos,
     public.jogos,

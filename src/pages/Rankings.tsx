@@ -1,6 +1,8 @@
-import { useJogadores, useRankingCraques, useRankingVencedores } from '../lib/api'
+import { useJogadores, useRankingAssiduidade, useRankingCraques, useRankingVencedores } from '../lib/api'
 import { exibir } from '../lib/format'
 import { Avatar, Erro, Spinner } from '../components/ui'
+
+const ANO = new Date().getFullYear()
 
 type Linha = { jogador_id: string; nome: string; apelido: string | null; valor: number }
 
@@ -30,6 +32,8 @@ function Top({ titulo, vazio, rotulo, linhas, carregando, erro }: {
 export default function Rankings() {
   const craques = useRankingCraques(5)
   const vencedores = useRankingVencedores(5)
+  const assiduos = useRankingAssiduidade(5)
+  const totalJogos = assiduos.data?.[0]?.total_jogos ?? 0
   return (
     <>
       <h1>Rankings</h1>
@@ -48,6 +52,14 @@ export default function Rankings() {
         linhas={vencedores.data?.map((r) => ({ ...r, valor: r.vitorias }))}
         carregando={vencedores.isLoading}
         erro={vencedores.error}
+      />
+      <Top
+        titulo={`📅 Mais assíduos de ${ANO}`}
+        vazio="Aparece após o primeiro jogo realizado do ano."
+        rotulo={(n) => `${n} de ${totalJogos} ${totalJogos === 1 ? 'jogo' : 'jogos'}`}
+        linhas={assiduos.data?.map((r) => ({ ...r, valor: r.presencas }))}
+        carregando={assiduos.isLoading}
+        erro={assiduos.error}
       />
     </>
   )

@@ -1,11 +1,11 @@
 import { Link } from 'react-router-dom'
 import {
-  useJogadores, useJogos, useJogosSemEncerrar, useJogosVotacaoAberta, useMeusJogosJogados, useMeusPagamentos,
-  useMeusVotos, useMinhasPresencas, usePeladas,
+  useCobrancas, useJogadores, useJogosSemEncerrar, useJogosVotacaoAberta, useLiberacao, useMeusVotos, useMinhasPresencas,
+  useProximoJogo,
 } from '../lib/api'
 import { useAuth } from '../lib/auth'
-import { formatarData, moeda } from '../lib/format'
-import { calcularPendencias, totalPendente } from '../lib/pendencias'
+import { confirmacaoLiberada, formatarData, moeda } from '../lib/format'
+import { totalDe } from '../lib/financeiro'
 
 interface Aviso {
   chave: string
@@ -23,30 +23,26 @@ interface Aviso {
 export default function Avisos() {
   const { eu, isAdmin } = useAuth()
   const { data: abertas = [] } = useJogosVotacaoAberta()
-  const { data: proximos = [] } = useJogos('proximos')
+  const { data: proximo } = useProximoJogo()
+  const { data: liberaEm } = useLiberacao(proximo?.id)
   const { data: semEncerrar = [] } = useJogosSemEncerrar(isAdmin)
   const { data: jogadores = [] } = useJogadores()
 
-  const ids = [...new Set([...abertas, ...proximos].map((j) => j.id))]
+  const ids = [...new Set([...abertas, ...(proximo ? [proximo] : [])].map((j) => j.id))]
   const { data: minhas = [] } = useMinhasPresencas(eu?.id, ids)
   const { data: meusVotos = [] } = useMeusVotos(eu?.id, abertas.map((j) => j.id))
 
-  const { data: peladas = [] } = usePeladas()
-  const { data: jogados = [] } = useMeusJogosJogados(eu?.id)
-  const { data: meusPagamentos = [] } = useMeusPagamentos(eu?.id)
+  const { cobrancas: minhasCobrancas } = useCobrancas(eu?.id)
 
   const avisos: Aviso[] = []
 
   // 0) Pendência financeira do jogador logado (sempre em primeiro lugar)
   if (eu) {
-    const pendencias = calcularPendencias({
-      eu, jogados, pagamentos: meusPagamentos,
-      valorMensalidade: peladas.find((p) => p.ativa)?.valor_mensalidade ?? 0,
-    })
+    const pendencias = minhasCobrancas.filter((c) => !c.pago)
     if (pendencias.length > 0) {
       avisos.push({
         chave: 'financeiro', icone: '💸', perigo: true,
-        titulo: `Pagamento pendente: ${moeda(totalPendente(pendencias))}`,
+        titulo: `Pagamento pendente: ${moeda(totalDe(pendencias))}`,
         linhas: [
           ...pendencias.slice(0, 3).map((p) => `${p.rotulo} · ${moeda(p.valor)}`),
           ...(pendencias.length > 3 ? [`e mais ${pendencias.length - 3}…`] : []),
@@ -79,17 +75,15 @@ export default function Avisos() {
     }
   })
 
-  // 2) Responder presença nos próximos jogos
-  proximos.forEach((j) => {
-    if (j.status === 'agendado' && !minhas.some((p) => p.jogo_id === j.id)) {
-      avisos.push({
-        chave: `pres-${j.id}`, icone: '🙋',
-        titulo: 'Confirme sua presença',
-        detalhe: `${j.peladas?.nome ?? 'Pelada'} · ${formatarData(j.data)}`,
-        to: `/jogo/${j.id}`,
-      })
-    }
-  })
+  // 2) Confirmar presença no PRÓXIMO jogo — só aparece quando a confirmação abre (ex.: segunda-feira)
+  if (proximo && proximo.status === 'agendado' && confirmacaoLiberada(liberaEm) && !minhas.some((p) => p.jogo_id === proximo.id)) {
+    avisos.push({
+      chave: `pres-${proximo.id}`, icone: '🙋',
+      titulo: 'Confirme sua presença',
+      detalhe: `${proximo.peladas?.nome ?? 'Pelada'} · ${formatarData(proximo.data)}`,
+      to: `/jogo/${proximo.id}`,
+    })
+  }
 
   if (isAdmin) {
     // 3) Admin: jogos que já passaram e não foram encerrados
@@ -120,7 +114,7 @@ export default function Avisos() {
       })
     }
     // 6) Admin: nenhum jogo futuro
-    if (proximos.length === 0) {
+    if (!proximo) {
       avisos.push({ chave: 'gerar', icone: '📅', titulo: 'Não há próximos jogos. Gere as próximas semanas.', to: '/peladas' })
     }
   }

@@ -143,6 +143,55 @@ update public.jogos j set valor = p.valor_avulso
 -- todo jogador novo entra como AVULSO; só um administrador muda para mensalista
 alter table public.jogadores alter column tipo set default 'avulso';
 
+-- v5: convidados, placar por time, votação automática, caixa do time
+alter table public.peladas add column if not exists liberar_confirmacao_dias smallint not null default 2;
+alter table public.peladas drop constraint if exists peladas_liberar_dias_check;
+alter table public.peladas add constraint peladas_liberar_dias_check check (liberar_confirmacao_dias between 0 and 6);
+
+alter table public.jogos add column if not exists placar_branco smallint;
+alter table public.jogos add column if not exists placar_preto smallint;
+alter table public.jogos drop constraint if exists jogos_placar_check;
+alter table public.jogos add constraint jogos_placar_check
+  check ((placar_branco is null or placar_branco >= 0) and (placar_preto is null or placar_preto >= 0));
+-- quando a votação foi aberta pela primeira vez (evita reabrir sozinha depois de encerrada)
+alter table public.jogos add column if not exists votacao_iniciada_em timestamptz;
+update public.jogos set votacao_iniciada_em = now() where status = 'realizado' and votacao_iniciada_em is null;
+
+-- 'faltou' = confirmou, mas não compareceu (removido pelo admin)
+alter table public.presencas drop constraint if exists presencas_status_check;
+alter table public.presencas add constraint presencas_status_check
+  check (status in ('confirmado','talvez','ausente','faltou'));
+
+-- Convidados avulsos: qualquer jogador convida; quem convidou fica responsável pelo pagamento.
+create table if not exists public.convidados (
+  id            uuid primary key default gen_random_uuid(),
+  jogo_id       uuid not null references public.jogos(id) on delete cascade,
+  convidado_por uuid not null references public.jogadores(id) on delete cascade,
+  nome          text not null check (length(trim(nome)) > 0),
+  posicao       text check (posicao is null or posicao in ('goleiro','zagueiro','ala','meia','atacante')),
+  created_at    timestamptz not null default now()
+);
+create index if not exists convidados_jogo_idx on public.convidados (jogo_id);
+
+alter table public.pagamentos add column if not exists convidado_id uuid references public.convidados(id) on delete cascade;
+alter table public.pagamentos drop constraint if exists pagamentos_tipo_check;
+alter table public.pagamentos add constraint pagamentos_tipo_check check (tipo in ('mensalidade','avulso','convidado'));
+alter table public.pagamentos drop constraint if exists pagamentos_convidado_check;
+alter table public.pagamentos add constraint pagamentos_convidado_check check ((tipo = 'convidado') = (convidado_id is not null));
+create unique index if not exists pagamentos_convidado_uk on public.pagamentos (convidado_id) where tipo = 'convidado';
+
+-- Caixa do time: entradas e saídas avulsas (as mensalidades/jogos pagos entram automaticamente no extrato).
+create table if not exists public.caixa_lancamentos (
+  id          uuid primary key default gen_random_uuid(),
+  tipo        text not null check (tipo in ('entrada','saida')),
+  descricao   text not null check (length(trim(descricao)) > 0),
+  valor       numeric(10,2) not null check (valor > 0),
+  data        date not null default current_date,
+  created_by  uuid references public.jogadores(id) on delete set null,
+  created_at  timestamptz not null default now()
+);
+create index if not exists caixa_lancamentos_data_idx on public.caixa_lancamentos (data desc);
+
 -- ---------------------------------------------------------------------
 -- FUNÇÕES AUXILIARES (usadas nas políticas RLS)
 -- ---------------------------------------------------------------------
@@ -160,6 +209,26 @@ $$;
 create or replace function public.is_admin()
 returns boolean language sql stable security definer set search_path = public as $$
   select exists (select 1 from public.jogadores where user_id = auth.uid() and ativo and is_admin);
+$$;
+
+-- Data em que a confirmação de presença abre: data do jogo anterior da pelada + N dias
+-- (padrão 2 = segunda-feira para jogos de sábado). Nulo = sempre aberta (não há jogo anterior).
+create or replace function public.liberacao_confirmacao(p_jogo_id uuid)
+returns date language sql stable security definer set search_path = public as $$
+  select (a.data + p.liberar_confirmacao_dias)::date
+    from public.jogos j
+    join public.peladas p on p.id = j.pelada_id
+    cross join lateral (
+      select x.data from public.jogos x
+       where x.pelada_id = j.pelada_id and x.data < j.data and x.status <> 'cancelado'
+       order by x.data desc limit 1
+    ) a
+   where j.id = p_jogo_id;
+$$;
+
+create or replace function public.confirmacao_aberta(p_jogo_id uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select coalesce((now() at time zone 'America/Sao_Paulo')::date >= public.liberacao_confirmacao(p_jogo_id), true);
 $$;
 
 -- ---------------------------------------------------------------------
@@ -240,6 +309,32 @@ create trigger presencas_touch
   before update on public.presencas
   for each row execute function public.touch_updated_at();
 
+-- Placar por time define o vencedor; jogo realizado abre a votação do craque automaticamente (uma única vez).
+create or replace function public.jogos_resultado()
+returns trigger language plpgsql as $$
+begin
+  if new.placar_branco is not null and new.placar_preto is not null then
+    new.time_vencedor := case
+      when new.placar_branco > new.placar_preto then 'branco'
+      when new.placar_branco < new.placar_preto then 'preto'
+      else 'empate' end;
+    if new.status = 'agendado' then
+      new.status := 'realizado';
+    end if;
+  end if;
+  if new.status = 'realizado' and new.votacao_iniciada_em is null then
+    new.votacao_aberta := true;
+    new.votacao_iniciada_em := now();
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists jogos_resultado on public.jogos;
+create trigger jogos_resultado
+  before insert or update on public.jogos
+  for each row execute function public.jogos_resultado();
+
 -- ---------------------------------------------------------------------
 -- ROW LEVEL SECURITY
 -- ---------------------------------------------------------------------
@@ -250,6 +345,8 @@ alter table public.jogos      enable row level security;
 alter table public.presencas  enable row level security;
 alter table public.votos      enable row level security;
 alter table public.pagamentos enable row level security;
+alter table public.convidados enable row level security;
+alter table public.caixa_lancamentos enable row level security;
 
 -- jogadores
 drop policy if exists jogadores_select on public.jogadores;
@@ -292,6 +389,7 @@ create policy presencas_insert on public.presencas for insert to authenticated
     public.is_admin() or (
       jogador_id = public.meu_jogador_id()
       and exists (select 1 from public.jogos j where j.id = jogo_id and j.status = 'agendado')
+      and public.confirmacao_aberta(jogo_id)
     )
   );
 drop policy if exists presencas_update on public.presencas;
@@ -301,6 +399,7 @@ create policy presencas_update on public.presencas for update to authenticated
     public.is_admin() or (
       jogador_id = public.meu_jogador_id()
       and exists (select 1 from public.jogos j where j.id = jogo_id and j.status = 'agendado')
+      and public.confirmacao_aberta(jogo_id)
     )
   );
 drop policy if exists presencas_delete on public.presencas;
@@ -338,6 +437,34 @@ create policy pagamentos_select on public.pagamentos for select to authenticated
   using (public.is_admin() or jogador_id = public.meu_jogador_id());
 drop policy if exists pagamentos_admin on public.pagamentos;
 create policy pagamentos_admin on public.pagamentos for all to authenticated
+  using (public.is_admin()) with check (public.is_admin());
+
+-- convidados: membros veem; cada jogador convida (jogo agendado e confirmação aberta); remoção via RPC
+drop policy if exists convidados_select on public.convidados;
+create policy convidados_select on public.convidados for select to authenticated
+  using (public.is_membro());
+drop policy if exists convidados_insert on public.convidados;
+create policy convidados_insert on public.convidados for insert to authenticated
+  with check (
+    public.is_admin() or (
+      convidado_por = public.meu_jogador_id()
+      and exists (select 1 from public.jogos j where j.id = jogo_id and j.status = 'agendado')
+      and public.confirmacao_aberta(jogo_id)
+    )
+  );
+drop policy if exists convidados_admin on public.convidados;
+create policy convidados_admin on public.convidados for update to authenticated
+  using (public.is_admin()) with check (public.is_admin());
+drop policy if exists convidados_delete on public.convidados;
+create policy convidados_delete on public.convidados for delete to authenticated
+  using (public.is_admin());
+
+-- caixa: todos os membros leem os lançamentos avulsos; só admin escreve
+drop policy if exists caixa_select on public.caixa_lancamentos;
+create policy caixa_select on public.caixa_lancamentos for select to authenticated
+  using (public.is_membro());
+drop policy if exists caixa_admin on public.caixa_lancamentos;
+create policy caixa_admin on public.caixa_lancamentos for all to authenticated
   using (public.is_admin()) with check (public.is_admin());
 
 -- ---------------------------------------------------------------------
@@ -439,13 +566,16 @@ end;
 $$;
 
 -- Marca (ou desmarca) um pagamento de forma atômica (somente admin).
+-- tipo: 'mensalidade' (por mês), 'avulso' (por jogo) ou 'convidado' (por convidado; jogador = quem convidou).
+drop function if exists public.marcar_pagamento(uuid, text, date, uuid, numeric, boolean);
 create or replace function public.marcar_pagamento(
   p_jogador_id uuid,
   p_tipo text,
   p_competencia date,
   p_jogo_id uuid,
   p_valor numeric,
-  p_pago boolean
+  p_pago boolean,
+  p_convidado_id uuid default null
 )
 returns void language plpgsql security definer set search_path = public as $$
 declare
@@ -462,13 +592,19 @@ begin
   elsif p_tipo = 'avulso' then
     select id into v_id from public.pagamentos
      where jogador_id = p_jogador_id and tipo = 'avulso' and jogo_id = p_jogo_id;
+  elsif p_tipo = 'convidado' then
+    if p_convidado_id is null then
+      raise exception 'Informe o convidado';
+    end if;
+    select id into v_id from public.pagamentos where tipo = 'convidado' and convidado_id = p_convidado_id;
   else
     raise exception 'Tipo de pagamento inválido';
   end if;
 
   if v_id is null then
-    insert into public.pagamentos (jogador_id, tipo, competencia, jogo_id, valor, pago, pago_em)
-    values (p_jogador_id, p_tipo, v_comp, case when p_tipo = 'avulso' then p_jogo_id end,
+    insert into public.pagamentos (jogador_id, tipo, competencia, jogo_id, convidado_id, valor, pago, pago_em)
+    values (p_jogador_id, p_tipo, v_comp, case when p_tipo <> 'mensalidade' then p_jogo_id end,
+            case when p_tipo = 'convidado' then p_convidado_id end,
             coalesce(p_valor, 0), p_pago, case when p_pago then now() end);
   else
     update public.pagamentos
@@ -492,7 +628,7 @@ begin
     select j.id, j.nome, j.apelido, count(*)::bigint
       from public.jogos g
       cross join lateral jsonb_array_elements(g.sorteio -> g.time_vencedor) e
-      join public.jogadores j on j.id = (e ->> 'id')::uuid
+      join public.jogadores j on j.id::text = e ->> 'id'
      where g.status = 'realizado'
        and g.time_vencedor in ('branco', 'preto')
        and g.sorteio is not null
@@ -521,6 +657,152 @@ begin
 end;
 $$;
 
+-- Marca como realizados os jogos que já passaram e tiveram confirmados; o trigger abre a votação do craque.
+-- O app chama isto ao abrir (qualquer membro). Para rodar sem depender do app, veja o pg_cron no fim do arquivo.
+create or replace function public.processar_jogos()
+returns int language plpgsql security definer set search_path = public as $$
+declare
+  v int;
+begin
+  if not public.is_membro() then
+    return 0;
+  end if;
+  update public.jogos g
+     set status = 'realizado'
+   where g.status = 'agendado'
+     and g.data < (now() at time zone 'America/Sao_Paulo')::date
+     and exists (select 1 from public.presencas p where p.jogo_id = g.id and p.status = 'confirmado');
+  get diagnostics v = row_count;
+  return v;
+end;
+$$;
+
+-- (interna) tira um participante (jogador ou 'c_<id do convidado>') do sorteio salvo do jogo.
+create or replace function public._tirar_do_sorteio(p_jogo_id uuid, p_id text)
+returns void language sql security definer set search_path = public as $$
+  update public.jogos g
+     set sorteio = jsonb_build_object(
+       'branco',   coalesce((select jsonb_agg(e) from jsonb_array_elements(g.sorteio -> 'branco') e where e ->> 'id' <> p_id), '[]'::jsonb),
+       'preto',    coalesce((select jsonb_agg(e) from jsonb_array_elements(g.sorteio -> 'preto') e where e ->> 'id' <> p_id), '[]'::jsonb),
+       'reservas', coalesce((select jsonb_agg(r) from jsonb_array_elements(g.sorteio -> 'reservas') r where r #>> '{}' <> p_id), '[]'::jsonb),
+       'gerado_em', g.sorteio -> 'gerado_em')
+   where g.id = p_jogo_id and g.sorteio is not null;
+$$;
+
+-- Admin: marca quem confirmou mas não compareceu. Some das listas, do sorteio, da cobrança e da votação.
+create or replace function public.remover_faltoso(p_jogo_id uuid, p_jogador_id uuid)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not public.is_admin() then
+    raise exception 'Apenas administradores podem fazer isso';
+  end if;
+  insert into public.presencas (jogo_id, jogador_id, status)
+  values (p_jogo_id, p_jogador_id, 'faltou')
+  on conflict (jogo_id, jogador_id) do update set status = 'faltou', funcao = null;
+  delete from public.votos where jogo_id = p_jogo_id and (eleitor_id = p_jogador_id or votado_id = p_jogador_id);
+  delete from public.pagamentos where jogo_id = p_jogo_id and jogador_id = p_jogador_id and tipo = 'avulso' and not pago;
+  perform public._tirar_do_sorteio(p_jogo_id, p_jogador_id::text);
+end;
+$$;
+
+-- Remove um convidado: quem convidou (jogo ainda agendado) ou admin (a qualquer momento, ex.: não compareceu).
+create or replace function public.remover_convidado(p_convidado_id uuid)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  v public.convidados;
+begin
+  select * into v from public.convidados where id = p_convidado_id;
+  if not found then
+    return;
+  end if;
+  if not (
+    public.is_admin() or (
+      v.convidado_por = public.meu_jogador_id()
+      and exists (select 1 from public.jogos j where j.id = v.jogo_id and j.status = 'agendado')
+    )
+  ) then
+    raise exception 'Sem permissão para remover este convidado';
+  end if;
+  delete from public.convidados where id = p_convidado_id;
+  perform public._tirar_do_sorteio(v.jogo_id, 'c_' || v.id::text);
+end;
+$$;
+
+-- Caixa do time (todos os membros, somente leitura): extrato de entradas e saídas.
+create or replace function public.caixa_extrato(p_limite int default 200)
+returns table (id text, data date, tipo text, descricao text, valor numeric)
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.is_membro() then
+    raise exception 'Acesso negado';
+  end if;
+  return query
+    select x.id, x.data, x.tipo, x.descricao, x.valor
+      from (
+        select 'p:' || p.id::text as id,
+               (p.pago_em at time zone 'America/Sao_Paulo')::date as data,
+               'entrada'::text as tipo,
+               (case p.tipo
+                  when 'mensalidade' then 'Mensalidade ' || to_char(p.competencia, 'MM/YYYY') || ' · ' || coalesce(nullif(j.apelido, ''), j.nome)
+                  when 'avulso' then 'Jogo ' || to_char(g.data, 'DD/MM') || ' · ' || coalesce(nullif(j.apelido, ''), j.nome)
+                  else 'Convidado ' || coalesce(c.nome, '?') || ' (de ' || coalesce(nullif(j.apelido, ''), j.nome) || ') · jogo ' || coalesce(to_char(g.data, 'DD/MM'), '')
+                end)::text as descricao,
+               p.valor as valor
+          from public.pagamentos p
+          join public.jogadores j on j.id = p.jogador_id
+          left join public.jogos g on g.id = p.jogo_id
+          left join public.convidados c on c.id = p.convidado_id
+         where p.pago
+        union all
+        select 'l:' || l.id::text, l.data, l.tipo, l.descricao, l.valor
+          from public.caixa_lancamentos l
+      ) x
+     order by x.data desc, x.id
+     limit greatest(1, p_limite);
+end;
+$$;
+
+create or replace function public.caixa_resumo()
+returns table (entradas numeric, saidas numeric)
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.is_membro() then
+    raise exception 'Acesso negado';
+  end if;
+  return query
+    select
+      coalesce((select sum(p.valor) from public.pagamentos p where p.pago), 0)
+        + coalesce((select sum(l.valor) from public.caixa_lancamentos l where l.tipo = 'entrada'), 0),
+      coalesce((select sum(l.valor) from public.caixa_lancamentos l where l.tipo = 'saida'), 0);
+end;
+$$;
+
+-- Assiduidade: quem mais esteve presente (presença confirmada em jogos realizados) no ano.
+create or replace function public.ranking_assiduidade(p_limite int default 5, p_ano int default null)
+returns table (jogador_id uuid, nome text, apelido text, presencas bigint, total_jogos bigint)
+language plpgsql stable security definer set search_path = public as $$
+declare
+  v_ano int := coalesce(p_ano, extract(year from now())::int);
+begin
+  if not public.is_membro() then
+    raise exception 'Acesso negado';
+  end if;
+  return query
+    with jogos_ano as (
+      select g.id from public.jogos g
+       where g.status = 'realizado' and extract(year from g.data)::int = v_ano
+    )
+    select j.id, j.nome, j.apelido, count(*)::bigint, (select count(*) from jogos_ano)::bigint
+      from public.presencas pr
+      join jogos_ano ja on ja.id = pr.jogo_id
+      join public.jogadores j on j.id = pr.jogador_id
+     where pr.status = 'confirmado'
+     group by j.id, j.nome, j.apelido
+     order by count(*) desc, j.nome
+     limit p_limite;
+end;
+$$;
+
 -- Permissões de execução das funções
 revoke execute on function public.gerar_jogos(uuid, int) from public, anon;
 revoke execute on function public.resultado_votacao(uuid) from public, anon;
@@ -528,14 +810,31 @@ revoke execute on function public.total_votos(uuid) from public, anon;
 revoke execute on function public.ranking_craques(int) from public, anon;
 revoke execute on function public.ranking_vencedores(int) from public, anon;
 revoke execute on function public.jogos_no_ano(int) from public, anon;
-revoke execute on function public.marcar_pagamento(uuid, text, date, uuid, numeric, boolean) from public, anon;
+revoke execute on function public.marcar_pagamento(uuid, text, date, uuid, numeric, boolean, uuid) from public, anon;
+revoke execute on function public.processar_jogos() from public, anon;
+revoke execute on function public._tirar_do_sorteio(uuid, text) from public, anon, authenticated;
+revoke execute on function public.remover_faltoso(uuid, uuid) from public, anon;
+revoke execute on function public.remover_convidado(uuid) from public, anon;
+revoke execute on function public.caixa_extrato(int) from public, anon;
+revoke execute on function public.caixa_resumo() from public, anon;
+revoke execute on function public.ranking_assiduidade(int, int) from public, anon;
+revoke execute on function public.liberacao_confirmacao(uuid) from public, anon;
+revoke execute on function public.confirmacao_aberta(uuid) from public, anon;
 grant execute on function public.gerar_jogos(uuid, int) to authenticated;
 grant execute on function public.resultado_votacao(uuid) to authenticated;
 grant execute on function public.total_votos(uuid) to authenticated;
 grant execute on function public.ranking_craques(int) to authenticated;
 grant execute on function public.ranking_vencedores(int) to authenticated;
 grant execute on function public.jogos_no_ano(int) to authenticated;
-grant execute on function public.marcar_pagamento(uuid, text, date, uuid, numeric, boolean) to authenticated;
+grant execute on function public.marcar_pagamento(uuid, text, date, uuid, numeric, boolean, uuid) to authenticated;
+grant execute on function public.processar_jogos() to authenticated;
+grant execute on function public.remover_faltoso(uuid, uuid) to authenticated;
+grant execute on function public.remover_convidado(uuid) to authenticated;
+grant execute on function public.caixa_extrato(int) to authenticated;
+grant execute on function public.caixa_resumo() to authenticated;
+grant execute on function public.ranking_assiduidade(int, int) to authenticated;
+grant execute on function public.liberacao_confirmacao(uuid) to authenticated;
+grant execute on function public.confirmacao_aberta(uuid) to authenticated;
 
 -- ---------------------------------------------------------------------
 -- OPCIONAL: gerar jogos automaticamente toda segunda-feira com pg_cron.
@@ -548,4 +847,14 @@ grant execute on function public.marcar_pagamento(uuid, text, date, uuid, numeri
 --          generate_series(current_date, current_date + 27, interval '1 day') d
 --    where p.ativa and extract(dow from d) = p.dia_semana
 --   on conflict (pelada_id, data) do nothing;
+-- $$);
+
+-- ---------------------------------------------------------------------
+-- OPCIONAL: processar jogos passados todo dia às 03:00 (Brasília ≈ 06:00 UTC), sem depender do app.
+-- ---------------------------------------------------------------------
+-- select cron.schedule('futsabado-processar-jogos', '0 6 * * *', $$
+--   update public.jogos g set status = 'realizado'
+--    where g.status = 'agendado'
+--      and g.data < (now() at time zone 'America/Sao_Paulo')::date
+--      and exists (select 1 from public.presencas p where p.jogo_id = g.id and p.status = 'confirmado');
 -- $$);

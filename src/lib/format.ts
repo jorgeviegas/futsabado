@@ -26,7 +26,7 @@ export function moeda(v: number): string {
   return Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
-export function primeiroDiaMes(d = new Date()): string {
+export function primeiroDiaMes(d: Date = new Date()): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
 }
 
@@ -48,4 +48,14 @@ export function exibir(j: { nome: string; apelido: string | null }): string {
 export function hojeISO(): string {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/** "Branco 5 x 9 Preto" — ou null se o placar ainda não foi registrado. */
+export function placarTexto(j: { placar_branco: number | null; placar_preto: number | null }): string | null {
+  return j.placar_branco != null && j.placar_preto != null ? `Branco ${j.placar_branco} x ${j.placar_preto} Preto` : null
+}
+
+/** Confirmação de presença liberada? (data nula = sempre liberada). */
+export function confirmacaoLiberada(liberaEm: string | null | undefined): boolean {
+  return !liberaEm || hojeISO() >= liberaEm
 }

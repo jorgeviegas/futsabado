@@ -30,7 +30,7 @@ export default function Peladas() {
           <div className="muted">
             Toda {DIAS[p.dia_semana].toLowerCase()} às {formatarHora(p.horario)}{p.local && ` · ${p.local}`}
             <br />
-            {p.limite_jogadores ? `Limite ${p.limite_jogadores} · ` : ''}Mensal {moeda(p.valor_mensalidade)} · Avulso {moeda(p.valor_avulso)}
+            {p.limite_jogadores ? `Limite ${p.limite_jogadores} · ` : ''}Mensalidade {moeda(p.valor_mensalidade)} · {moeda(p.valor_avulso)} por jogo
           </div>
           <div className="linha wrap">
             <button
@@ -94,9 +94,10 @@ function Form({ inicial, onFechar }: { inicial: Partial<Pelada>; onFechar: () =>
         </div>
         <label>Local<input value={f.local} onChange={(e) => setF({ ...f, local: e.target.value })} /></label>
         <label>Limite de jogadores (opcional)<input type="number" min={1} value={f.limite_jogadores} onChange={(e) => setF({ ...f, limite_jogadores: e.target.value })} /></label>
+        <p className="muted">O valor individual é copiado para cada jogo gerado e pode ser ajustado jogo a jogo. Quem joga fica devendo esse valor.</p>
         <div className="grid2">
           <label>Mensalidade (R$)<input type="number" min={0} step="0.01" value={f.valor_mensalidade} onChange={(e) => setF({ ...f, valor_mensalidade: e.target.value })} /></label>
-          <label>Avulso por jogo (R$)<input type="number" min={0} step="0.01" value={f.valor_avulso} onChange={(e) => setF({ ...f, valor_avulso: e.target.value })} /></label>
+          <label>Valor individual por jogo (R$)<input type="number" min={0} step="0.01" value={f.valor_avulso} onChange={(e) => setF({ ...f, valor_avulso: e.target.value })} /></label>
         </div>
         <label className="linha"><input type="checkbox" style={{ width: 'auto' }} checked={f.ativa} onChange={(e) => setF({ ...f, ativa: e.target.checked })} /> Ativa</label>
         <Erro erro={salvar.error ?? excluir.error} />
@@ -115,13 +116,15 @@ function JogoExtra({ pelada, onFechar }: { pelada: Pelada; onFechar: () => void 
   const criar = useCriarJogoAvulso()
   const [data, setData] = useState(hojeISO())
   const [horario, setHorario] = useState(pelada.horario.slice(0, 5))
+  const [valor, setValor] = useState(String(pelada.valor_avulso))
   return (
     <Modal titulo="Jogo extra" onFechar={onFechar}>
-      <form className="form" onSubmit={(e) => { e.preventDefault(); criar.mutate({ pelada_id: pelada.id, data, horario, local: pelada.local }, { onSuccess: onFechar }) }}>
+      <form className="form" onSubmit={(e) => { e.preventDefault(); criar.mutate({ pelada_id: pelada.id, data, horario, local: pelada.local, valor: Number(valor) || 0 }, { onSuccess: onFechar }) }}>
         <div className="grid2">
           <label>Data<input type="date" value={data} onChange={(e) => setData(e.target.value)} required /></label>
           <label>Horário<input type="time" value={horario} onChange={(e) => setHorario(e.target.value)} required /></label>
         </div>
+        <label>Valor individual (R$)<input type="number" min={0} step="0.01" value={valor} onChange={(e) => setValor(e.target.value)} required /></label>
         <Erro erro={criar.error} />
         <button className="btn" disabled={criar.isPending}>Criar jogo</button>
       </form>

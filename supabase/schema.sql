@@ -122,6 +122,22 @@ alter table public.jogos drop constraint if exists jogos_time_vencedor_check;
 alter table public.jogos add constraint jogos_time_vencedor_check
   check (time_vencedor is null or time_vencedor in ('grena','preto','empate'));
 
+-- v3: goleiro escolhe gol/linha, valor individual por jogo e padrão "avulso"
+alter table public.presencas add column if not exists funcao text;
+alter table public.presencas drop constraint if exists presencas_funcao_check;
+alter table public.presencas add constraint presencas_funcao_check
+  check (funcao is null or funcao in ('gol','linha'));
+
+alter table public.jogos add column if not exists valor numeric(10,2);
+alter table public.jogos drop constraint if exists jogos_valor_check;
+alter table public.jogos add constraint jogos_valor_check check (valor is null or valor >= 0);
+-- jogos já criados herdam o valor individual da pelada
+update public.jogos j set valor = p.valor_avulso
+  from public.peladas p where j.pelada_id = p.id and j.valor is null;
+
+-- todo jogador novo entra como AVULSO; só um administrador muda para mensalista
+alter table public.jogadores alter column tipo set default 'avulso';
+
 -- ---------------------------------------------------------------------
 -- FUNÇÕES AUXILIARES (usadas nas políticas RLS)
 -- ---------------------------------------------------------------------
@@ -346,8 +362,8 @@ begin
   v_data := v_hoje + ((v_pelada.dia_semana - extract(dow from v_hoje)::int + 7) % 7);
 
   for i in 1..greatest(1, least(p_semanas, 52)) loop
-    insert into public.jogos (pelada_id, data, horario, local)
-    values (v_pelada.id, v_data, v_pelada.horario, v_pelada.local)
+    insert into public.jogos (pelada_id, data, horario, local, valor)
+    values (v_pelada.id, v_data, v_pelada.horario, v_pelada.local, v_pelada.valor_avulso)
     on conflict (pelada_id, data) do nothing;
     get diagnostics v_linhas = row_count;
     v_criados := v_criados + v_linhas;
@@ -521,8 +537,8 @@ grant execute on function public.marcar_pagamento(uuid, text, date, uuid, numeri
 -- Ative a extensão pg_cron em Database > Extensions e descomente:
 -- ---------------------------------------------------------------------
 -- select cron.schedule('futsabado-gerar-jogos', '0 9 * * 1', $$
---   insert into public.jogos (pelada_id, data, horario, local)
---   select p.id, d::date, p.horario, p.local
+--   insert into public.jogos (pelada_id, data, horario, local, valor)
+--   select p.id, d::date, p.horario, p.local, p.valor_avulso
 --     from public.peladas p,
 --          generate_series(current_date, current_date + 27, interval '1 day') d
 --    where p.ativa and extract(dow from d) = p.dia_semana

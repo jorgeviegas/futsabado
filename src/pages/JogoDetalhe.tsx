@@ -9,7 +9,8 @@ import Escalacao from '../components/Escalacao'
 import { useAuth } from '../lib/auth'
 import { exibir, formatarData, formatarHora } from '../lib/format'
 import { Avatar, Erro, Modal, Spinner } from '../components/ui'
-import type { Escalado, Jogador, StatusPresenca } from '../lib/types'
+import type { Escalado, FuncaoGoleiro, Jogador, StatusPresenca } from '../lib/types'
+import { POSICOES, moeda } from '../lib/format'
 
 const NOME_TIME = { grena: 'Time Grená', preto: 'Time Preto', empate: 'Empate' } as const
 const NOME_SLOT = { GOL: 'Goleiro', ZAG1: 'Zagueiro', ZAG2: 'Zagueiro', ALA1: 'Ala', ALA2: 'Ala', MEI: 'Meia', ATA: 'Atacante' } as const
@@ -31,12 +32,16 @@ export default function JogoDetalhe() {
   const atualizar = useAtualizarJogo()
   const excluir = useExcluirJogo()
   const [editando, setEditando] = useState(false)
+  const [escolhendoFuncao, setEscolhendoFuncao] = useState(false)
   const { data: jogosAno = {} } = useJogosNoAno()
 
   if (isLoading) return <Spinner />
   if (error || !jogo) return <Erro erro={error ?? new Error('Jogo não encontrado')} />
 
-  const minha = pres.find((p) => p.jogador_id === eu?.id)?.status
+  const minhaPres = pres.find((p) => p.jogador_id === eu?.id)
+  const minha = minhaPres?.status
+  // goleiro com posição secundária precisa dizer se joga no gol ou na linha
+  const precisaFuncao = eu?.posicao === 'goleiro' && Boolean(eu.posicao_secundaria)
   const confirmados = jogadores.filter((j) => pres.some((p) => p.jogador_id === j.id && p.status === 'confirmado'))
   const talvez = jogadores.filter((j) => pres.some((p) => p.jogador_id === j.id && p.status === 'talvez'))
   const ausentes = jogadores.filter((j) => pres.some((p) => p.jogador_id === j.id && p.status === 'ausente'))
@@ -49,6 +54,7 @@ export default function JogoDetalhe() {
     const sorteio = sortear(
       confirmados.map((j) => ({
         id: j.id, posicao: j.posicao, posicao_secundaria: j.posicao_secundaria, jogosAno: jogosAno[j.id] ?? 0,
+        funcao: pres.find((p) => p.jogador_id === j.id)?.funcao,
       })),
     )
     atualizar.mutate({ id: jogo!.id, sorteio })
@@ -69,6 +75,7 @@ export default function JogoDetalhe() {
         <div className="muted">
           {formatarData(jogo.data)} às {formatarHora(jogo.horario)}{jogo.local && ` · ${jogo.local}`}
         </div>
+        {jogo.valor != null && <div className="muted">💵 {moeda(jogo.valor)} por jogador</div>}
         {jogo.placar && <div>Placar: <strong>{jogo.placar}</strong></div>}
         {jogo.time_vencedor && <div>Resultado: <strong>{jogo.time_vencedor === 'empate' ? 'Empate' : `Vitória do ${NOME_TIME[jogo.time_vencedor]}`}</strong></div>}
         {jogo.observacoes && <div className="muted">{jogo.observacoes}</div>}
@@ -83,18 +90,44 @@ export default function JogoDetalhe() {
                 key={o.v}
                 className={`${minha === o.v ? 'ativo' : ''} ${o.cls}`}
                 disabled={definir.isPending || (o.v === 'confirmado' && lotado)}
-                onClick={() => definir.mutate({ jogoId: jogo.id, jogadorId: eu.id, status: minha === o.v ? null : o.v })}
+                onClick={() => {
+                  if (o.v === 'confirmado' && precisaFuncao && minha !== 'confirmado') return setEscolhendoFuncao(true)
+                  setEscolhendoFuncao(false)
+                  definir.mutate({ jogoId: jogo.id, jogadorId: eu.id, status: minha === o.v ? null : o.v })
+                }}
               >
                 {o.rot}
               </button>
             ))}
           </div>
+          {precisaFuncao && (escolhendoFuncao || minha === 'confirmado') && (
+            <div className="form" style={{ borderTop: '1px solid var(--borda)', paddingTop: '.7rem' }}>
+              <strong>🧤 Você é goleiro. Onde vai jogar neste jogo?</strong>
+              <div className="seg">
+                {([['gol', '🧤 No gol'], ['linha', `🏃 Na linha (${POSICOES[eu.posicao_secundaria!]})`]] as [FuncaoGoleiro, string][]).map(([f, rot]) => (
+                  <button
+                    key={f}
+                    type="button"
+                    className={minha === 'confirmado' && (minhaPres?.funcao ?? 'gol') === f ? 'ativo ok' : ''}
+                    disabled={definir.isPending || (lotado && minha !== 'confirmado')}
+                    onClick={() => {
+                      setEscolhendoFuncao(false)
+                      definir.mutate({ jogoId: jogo.id, jogadorId: eu.id, status: 'confirmado', funcao: f })
+                    }}
+                  >
+                    {rot}
+                  </button>
+                ))}
+              </div>
+              {minha !== 'confirmado' && <span className="muted">Escolha uma opção para confirmar sua presença.</span>}
+            </div>
+          )}
           {lotado && <p className="muted">Lista cheia ({limite} jogadores). Fale com um admin.</p>}
           <Erro erro={definir.error} />
         </div>
       )}
 
-      <Lista titulo={`Confirmados (${confirmados.length}${limite ? `/${limite}` : ''})`} lista={confirmados} />
+      <Lista titulo={`Confirmados (${confirmados.length}${limite ? `/${limite}` : ''})`} lista={confirmados} funcoes={Object.fromEntries(pres.filter((p) => p.funcao).map((p) => [p.jogador_id, p.funcao!]))} />
       {talvez.length > 0 && <Lista titulo={`Talvez (${talvez.length})`} lista={talvez} />}
       {ausentes.length > 0 && <Lista titulo={`Não vão (${ausentes.length})`} lista={ausentes} />}
 
@@ -155,7 +188,7 @@ export default function JogoDetalhe() {
   )
 }
 
-function Lista({ titulo, lista }: { titulo: string; lista: Jogador[] }) {
+function Lista({ titulo, lista, funcoes = {} }: { titulo: string; lista: Jogador[]; funcoes?: Record<string, FuncaoGoleiro> }) {
   return (
     <div className="card">
       <h3>{titulo}</h3>
@@ -164,6 +197,8 @@ function Lista({ titulo, lista }: { titulo: string; lista: Jogador[] }) {
         <div className="linha" key={j.id}>
           <Avatar nome={exibir(j)} numero={j.numero_camisa} />
           <span className="grow">{exibir(j)}</span>
+          {funcoes[j.id] === 'linha' && <span className="chip aviso">joga na linha</span>}
+          {funcoes[j.id] === 'gol' && <span className="chip">🧤 gol</span>}
           {j.tipo === 'avulso' && <span className="chip">avulso</span>}
         </div>
       ))}
@@ -275,7 +310,7 @@ function EditarJogo({ jogo, onFechar }: { jogo: NonNullable<ReturnType<typeof us
   const atualizar = useAtualizarJogo()
   const [f, setF] = useState({
     data: jogo.data, horario: jogo.horario.slice(0, 5), local: jogo.local ?? '', placar: jogo.placar ?? '', observacoes: jogo.observacoes ?? '',
-    time_vencedor: jogo.time_vencedor ?? '',
+    time_vencedor: jogo.time_vencedor ?? '', valor: jogo.valor?.toString() ?? '',
   })
   return (
     <Modal titulo="Editar jogo" onFechar={onFechar}>
@@ -287,6 +322,7 @@ function EditarJogo({ jogo, onFechar }: { jogo: NonNullable<ReturnType<typeof us
             {
               id: jogo.id, ...f, local: f.local || null, placar: f.placar || null, observacoes: f.observacoes || null,
               time_vencedor: (f.time_vencedor || null) as typeof jogo.time_vencedor,
+              valor: f.valor === '' ? null : Number(f.valor),
             },
             { onSuccess: onFechar },
           )
@@ -297,6 +333,9 @@ function EditarJogo({ jogo, onFechar }: { jogo: NonNullable<ReturnType<typeof us
           <label>Horário<input type="time" value={f.horario} onChange={(e) => setF({ ...f, horario: e.target.value })} required /></label>
         </div>
         <label>Local<input value={f.local} onChange={(e) => setF({ ...f, local: e.target.value })} /></label>
+        <label>Valor individual (R$) — quem jogou fica devendo este valor
+          <input type="number" min={0} step="0.01" value={f.valor} onChange={(e) => setF({ ...f, valor: e.target.value })} />
+        </label>
         <label>Placar<input value={f.placar} placeholder="Ex.: Grená 5 x 4 Preto" onChange={(e) => setF({ ...f, placar: e.target.value })} /></label>
         <label>Time vencedor
           <select value={f.time_vencedor} onChange={(e) => setF({ ...f, time_vencedor: e.target.value as typeof f.time_vencedor })}>

@@ -78,7 +78,7 @@ function Form({ inicial, admin, onFechar }: { inicial: Partial<Jogador>; admin: 
   const excluir = useExcluirJogador()
   const [f, setF] = useState({
     nome: inicial.nome ?? '', apelido: inicial.apelido ?? '', email: inicial.email ?? '', telefone: inicial.telefone ?? '',
-    posicao: inicial.posicao ?? null, posicao_secundaria: inicial.posicao_secundaria ?? null, camisa: inicial.numero_camisa?.toString() ?? '', tipo: inicial.tipo ?? 'mensalista', is_admin: inicial.is_admin ?? false, ativo: inicial.ativo ?? true,
+    posicao: inicial.posicao ?? null, posicao_secundaria: inicial.posicao_secundaria ?? null, camisa: inicial.numero_camisa?.toString() ?? '', tipo: inicial.tipo ?? 'avulso', is_admin: inicial.is_admin ?? false, ativo: inicial.ativo ?? true,
   })
   const novo = !inicial.id
 
@@ -120,8 +120,8 @@ function Form({ inicial, admin, onFechar }: { inicial: Partial<Jogador>; admin: 
         {admin && (
           <label>Tipo
             <select value={f.tipo} onChange={(e) => setF({ ...f, tipo: e.target.value as never })}>
-              <option value="mensalista">Mensalista</option>
-              <option value="avulso">Avulso</option>
+              <option value="avulso">Avulso (paga por jogo)</option>
+              <option value="mensalista">Mensalista (só admin altera)</option>
             </select>
           </label>
         )}

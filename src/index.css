@@ -121,3 +121,11 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--grena-2); b
 .bolinha.grena { background: var(--grena-2); } .bolinha.preto { background: #000; }
 .pos-tag { font-size: .7rem; color: var(--texto-2); min-width: 2.2rem; }
 .chip.fora { color: var(--aviso); border-color: var(--aviso); }
+
+/* Quadro de avisos */
+.avisos { border-color: var(--grena-2); background: linear-gradient(180deg, #24101a, var(--card)); }
+.avisos h2 { display: flex; align-items: center; gap: .5rem; }
+.aviso { display: flex; align-items: center; gap: .7rem; padding: .6rem .7rem; border-radius: 10px; background: var(--card-2); border: 1px solid var(--borda); }
+.aviso:active { background: var(--grena-3); }
+.aviso.destaque { border-color: var(--aviso); }
+.aviso-icone { font-size: 1.3rem; }

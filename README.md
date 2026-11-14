@@ -63,6 +63,18 @@ Abra a URL no celular → Chrome: **Instalar app / Adicionar à tela inicial** �
 
 > Se você já tinha rodado o `schema.sql` antes, rode-o de novo: ele é idempotente e aplica as novas colunas e funções.
 
+## Avisos, goleiros e valores
+
+- **Quadro de avisos** (topo da tela *Jogos*): lembrete de **votar no craque** após o jogo ser encerrado, jogos
+  para **confirmar presença** e, para admins, jogos passados para encerrar, votações para fechar, cadastros
+  para aprovar e falta de próximos jogos.
+- **Goleiro com posição secundária** escolhe, ao confirmar presença, se joga **no gol ou na linha**. O sorteio
+  respeita: quem vai para a linha é sorteado na posição secundária.
+- **Valor individual por jogo**: definido na pelada (copiado para cada jogo gerado) e ajustável em *Editar jogo*
+  ou ao criar um jogo extra. No Financeiro, cada **avulso que jogou** (presença confirmada em jogo realizado)
+  fica devendo o valor daquele jogo. Mensalistas pagam a mensalidade.
+- Todo jogador novo entra como **avulso**; apenas administradores alteram para mensalista.
+
 ## Fluxo de uso
 
 1. **Peladas** (admin): crie “Pelada de Sábado” (dia, horário, local, limite, valores) e toque em *Gerar próximas 4 semanas*.

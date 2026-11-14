@@ -48,7 +48,7 @@ export default function Financeiro() {
         const jogo = jogos.find((x) => x.id === p.jogo_id)
         if (jogo) cobrancas.push({
           chave: `${j.id}-${p.jogo_id}`, jogador: j, tipo: 'avulso', jogoId: jogo.id,
-          rotulo: `Jogo ${formatarData(jogo.data)}`, valor: jogo.peladas?.valor_avulso ?? valorAvulso,
+          rotulo: `Jogo ${formatarData(jogo.data)}`, valor: jogo.valor ?? jogo.peladas?.valor_avulso ?? valorAvulso,
         })
       })
     }
@@ -79,7 +79,7 @@ export default function Financeiro() {
       )}
 
       <Erro erro={marcar.error} />
-      {cobrancas.length === 0 && <p className="vazio">Nenhuma cobrança neste mês.</p>}
+      {cobrancas.length === 0 && <p className="vazio">Nenhuma cobrança neste mês. Avulsos são cobrados pelos jogos realizados em que confirmaram presença.</p>}
       {cobrancas.map((c) => {
         const pago = status(c)
         const registro = pg(c.jogador.id, c.tipo, c.jogoId)

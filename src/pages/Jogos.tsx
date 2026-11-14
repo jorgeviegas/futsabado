@@ -4,6 +4,7 @@ import { useConfirmadosPorJogo, useJogos } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { formatarData, formatarHora } from '../lib/format'
 import { Erro, Spinner, Vazio } from '../components/ui'
+import Avisos from '../components/Avisos'
 import type { Jogo } from '../lib/types'
 
 const NOME_TIME: Record<string, string> = { grena: 'Vitória Grená', preto: 'Vitória Preto', empate: 'Empate' }
@@ -14,6 +15,7 @@ export default function Jogos() {
   const [aba, setAba] = useState<Aba>('proximos')
   return (
     <>
+      <Avisos />
       <div className="seg" role="tablist">
         {(['proximos', 'passados'] as const).map((a) => (
           <button key={a} role="tab" className={aba === a ? 'ativo' : ''} onClick={() => setAba(a)}>

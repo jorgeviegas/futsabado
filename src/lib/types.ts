@@ -57,16 +57,22 @@ export interface Jogo {
   status: StatusJogo
   votacao_aberta: boolean
   placar: string | null
+  /** Valor individual cobrado de cada jogador que jogou. */
+  valor: number | null
   sorteio: Sorteio | null
   time_vencedor: TimeCor | 'empate' | null
   observacoes: string | null
   peladas?: Pick<Pelada, 'nome' | 'limite_jogadores' | 'valor_avulso'> | null
 }
 
+/** Goleiro com posição secundária escolhe se joga no gol ou na linha. */
+export type FuncaoGoleiro = 'gol' | 'linha'
+
 export interface Presenca {
   jogo_id: string
   jogador_id: string
   status: StatusPresenca
+  funcao: FuncaoGoleiro | null
 }
 
 export interface Voto {

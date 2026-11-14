@@ -28,6 +28,16 @@ export interface Candidato {
   posicao: Posicao | null
   posicao_secundaria: Posicao | null
   jogosAno: number
+  /** Só vale para goleiro com posição secundária: 'linha' = hoje joga na linha. */
+  funcao?: 'gol' | 'linha' | null
+}
+
+/** Goleiro que avisou que vai jogar na linha passa a ter a posição secundária como principal. */
+function aplicarFuncao(c: Candidato): Candidato {
+  if (c.posicao === 'goleiro' && c.funcao === 'linha' && c.posicao_secundaria) {
+    return { ...c, posicao: c.posicao_secundaria, posicao_secundaria: null }
+  }
+  return c
 }
 
 function embaralhar<T>(lista: T[], rnd: () => number): T[] {
@@ -83,7 +93,8 @@ function escalar(time: Candidato[]): Escalado[] {
   return SLOTS.filter((s) => atribuidos.has(s)).map((s) => atribuidos.get(s)!)
 }
 
-export function sortear(candidatos: Candidato[], rnd: () => number = Math.random): Sorteio {
+export function sortear(entrada: Candidato[], rnd: () => number = Math.random): Sorteio {
+  const candidatos = entrada.map(aplicarFuncao)
   const { titulares, reservas } = separarTitulares(candidatos, rnd)
 
   // Agrupa por posição primária e distribui alternando entre os times (A, B, A, B…),

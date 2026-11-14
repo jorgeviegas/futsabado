@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from './supabase'
 import { hojeISO, somaMeses } from './format'
 import type {
-  Jogador, Jogo, Pagamento, Pelada, Presenca, RankingCraque, RankingVencedor, ResultadoVotacao, StatusPresenca, Voto,
+  FuncaoGoleiro, Jogador, Jogo, Pagamento, Pelada, Presenca, RankingCraque, RankingVencedor, ResultadoVotacao, StatusPresenca, Voto,
 } from './types'
 
 function ok<T>(r: { data: T; error: { message: string } | null }): T {
@@ -111,7 +111,7 @@ export const useExcluirJogo = () =>
 
 export const useCriarJogoAvulso = () =>
   useAcao(
-    async (j: { pelada_id: string; data: string; horario: string; local: string | null }) =>
+    async (j: { pelada_id: string; data: string; horario: string; local: string | null; valor: number }) =>
       ok(await supabase.from('jogos').insert(j)),
     [['jogos']],
   )
@@ -127,12 +127,15 @@ export const usePresencas = (jogoId: string | undefined) =>
 
 export const useDefinirPresenca = () =>
   useAcao(
-    async (v: { jogoId: string; jogadorId: string; status: StatusPresenca | null }) =>
+    async (v: { jogoId: string; jogadorId: string; status: StatusPresenca | null; funcao?: FuncaoGoleiro | null }) =>
       ok(
         v.status
-          ? await supabase
-              .from('presencas')
-              .upsert({ jogo_id: v.jogoId, jogador_id: v.jogadorId, status: v.status })
+          ? await supabase.from('presencas').upsert({
+              jogo_id: v.jogoId,
+              jogador_id: v.jogadorId,
+              status: v.status,
+              funcao: v.status === 'confirmado' ? (v.funcao ?? null) : null,
+            })
           : await supabase.from('presencas').delete().eq('jogo_id', v.jogoId).eq('jogador_id', v.jogadorId),
       ),
     [['presencas']],
@@ -242,7 +245,7 @@ export const useMarcarPagamento = () =>
     [['pagamentos']],
   )
 
-/** Jogos realizados do mês (para cobrança de avulsos). */
+/** Jogos realizados do mês: cada avulso que jogou deve o valor individual do jogo. */
 export const useJogosDoMes = (competencia: string) =>
   useQuery({
     queryKey: ['jogos', 'mes', competencia],
@@ -254,8 +257,50 @@ export const useJogosDoMes = (competencia: string) =>
           .select(JOGO_SELECT)
           .gte('data', competencia)
           .lt('data', fim)
-          .neq('status', 'cancelado')
+          .eq('status', 'realizado')
           .order('data'),
       ) as unknown as Jogo[]
     },
+  })
+
+// ---------- Quadro de avisos ----------
+/** Jogos realizados com a votação do craque aberta. */
+export const useJogosVotacaoAberta = () =>
+  useQuery({
+    queryKey: ['jogos', 'votacaoAberta'],
+    queryFn: async () =>
+      ok(
+        await supabase.from('jogos').select(JOGO_SELECT).eq('votacao_aberta', true).order('data', { ascending: false }),
+      ) as unknown as Jogo[],
+  })
+
+/** Jogos cuja data já passou e ainda não foram encerrados (aviso para admins). */
+export const useJogosSemEncerrar = (habilitado: boolean) =>
+  useQuery({
+    queryKey: ['jogos', 'semEncerrar'],
+    enabled: habilitado,
+    queryFn: async () =>
+      ok(
+        await supabase.from('jogos').select(JOGO_SELECT).eq('status', 'agendado').lt('data', hojeISO()).order('data'),
+      ) as unknown as Jogo[],
+  })
+
+/** Minhas respostas de presença nos jogos informados. */
+export const useMinhasPresencas = (jogadorId: string | undefined, jogoIds: string[]) =>
+  useQuery({
+    queryKey: ['presencas', 'minhas', jogadorId, jogoIds.join(',')],
+    enabled: Boolean(jogadorId) && jogoIds.length > 0,
+    queryFn: async () =>
+      ok(
+        await supabase.from('presencas').select('*').eq('jogador_id', jogadorId!).in('jogo_id', jogoIds),
+      ) as Presenca[],
+  })
+
+/** Meus votos nos jogos informados. */
+export const useMeusVotos = (eleitorId: string | undefined, jogoIds: string[]) =>
+  useQuery({
+    queryKey: ['voto', 'meus', eleitorId, jogoIds.join(',')],
+    enabled: Boolean(eleitorId) && jogoIds.length > 0,
+    queryFn: async () =>
+      ok(await supabase.from('votos').select('*').eq('eleitor_id', eleitorId!).in('jogo_id', jogoIds)) as Voto[],
   })

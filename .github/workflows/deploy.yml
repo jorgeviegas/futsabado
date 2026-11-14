@@ -24,6 +24,16 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Verificar secrets do Supabase
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          ok=1
+          for v in VITE_SUPABASE_URL VITE_SUPABASE_ANON_KEY; do
+            if [ -z "${!v}" ]; then echo "::error::Secret $v está vazio ou não existe (precisa ser um Repository secret)"; ok=0; else echo "$v: definido (${#v} chars no nome, valor presente)"; fi
+          done
+          [ "$ok" = 1 ]
       - name: Build
         run: npm run build
         env:

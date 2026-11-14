@@ -32,7 +32,7 @@ export interface Pelada {
 }
 
 export type Slot = 'GOL' | 'ZAG1' | 'ZAG2' | 'ALA1' | 'MEI' | 'ALA2' | 'ATA'
-export type TimeCor = 'grena' | 'preto'
+export type TimeCor = 'branco' | 'preto'
 
 export interface Escalado {
   id: string
@@ -42,7 +42,7 @@ export interface Escalado {
 }
 
 export interface Sorteio {
-  grena: Escalado[]
+  branco: Escalado[]
   preto: Escalado[]
   reservas: string[]
   gerado_em: string

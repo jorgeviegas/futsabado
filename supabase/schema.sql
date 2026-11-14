@@ -115,12 +115,17 @@ alter table public.jogadores add constraint jogadores_camisa_check
 create unique index if not exists jogadores_numero_camisa_uk
   on public.jogadores (numero_camisa) where numero_camisa is not null;
 
--- sorteio: {"grena":[{"id","slot","fora"}], "preto":[...], "reservas":[ids], "gerado_em"}
+-- sorteio: {"branco":[{"id","slot","fora"}], "preto":[...], "reservas":[ids], "gerado_em"}
 alter table public.jogos add column if not exists sorteio jsonb;
 alter table public.jogos add column if not exists time_vencedor text;
 alter table public.jogos drop constraint if exists jogos_time_vencedor_check;
+-- v4: os times passaram a ser Preto e Branco (antes Grená e Preto) — converte dados já gravados
+update public.jogos set time_vencedor = 'branco' where time_vencedor = 'grena';
+update public.jogos
+   set sorteio = (sorteio - 'grena') || jsonb_build_object('branco', sorteio -> 'grena')
+ where sorteio ? 'grena';
 alter table public.jogos add constraint jogos_time_vencedor_check
-  check (time_vencedor is null or time_vencedor in ('grena','preto','empate'));
+  check (time_vencedor is null or time_vencedor in ('branco','preto','empate'));
 
 -- v3: goleiro escolhe gol/linha, valor individual por jogo e padrão "avulso"
 alter table public.presencas add column if not exists funcao text;
@@ -489,7 +494,7 @@ begin
       cross join lateral jsonb_array_elements(g.sorteio -> g.time_vencedor) e
       join public.jogadores j on j.id = (e ->> 'id')::uuid
      where g.status = 'realizado'
-       and g.time_vencedor in ('grena', 'preto')
+       and g.time_vencedor in ('branco', 'preto')
        and g.sorteio is not null
      group by j.id, j.nome, j.apelido
      order by count(*) desc, j.nome

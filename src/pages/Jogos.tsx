@@ -7,7 +7,7 @@ import { Erro, Spinner, Vazio } from '../components/ui'
 import Avisos from '../components/Avisos'
 import type { Jogo } from '../lib/types'
 
-const NOME_TIME: Record<string, string> = { grena: 'Vitória Grená', preto: 'Vitória Preto', empate: 'Empate' }
+const NOME_TIME: Record<string, string> = { branco: 'Vitória Branco', preto: 'Vitória Preto', empate: 'Empate' }
 
 type Aba = 'proximos' | 'passados'
 

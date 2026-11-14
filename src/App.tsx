@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider, useAuth } from './lib/auth'
@@ -19,11 +20,13 @@ const queryClient = new QueryClient({
 
 function Rotas() {
   const { session, carregando, pendente, eu, isAdmin } = useAuth()
+  // "Pular" vale só até o app ser aberto de novo (estado em memória, de propósito)
+  const [pulouPosicao, setPulouPosicao] = useState(false)
   if (carregando) return <div className="centro"><Spinner /></div>
   if (!session) return <Login />
-  if (!eu) return <Pendente />
-  if (!eu.perfil_completo) return <Onboarding />
-  if (pendente) return <Pendente />
+  if (!eu || pendente) return <Pendente />
+  // só depois da aprovação o jogador escolhe a posição
+  if (!eu.posicao && !pulouPosicao) return <Onboarding onPular={() => setPulouPosicao(true)} />
   return (
     <Routes>
       <Route element={<Layout />}>
@@ -31,6 +34,7 @@ function Rotas() {
         <Route path="jogo/:id" element={<JogoDetalhe />} />
         <Route path="jogadores" element={<Jogadores />} />
         <Route path="rankings" element={<Rankings />} />
+        <Route path="posicoes" element={<Onboarding embutido />} />
         <Route path="financeiro" element={<Financeiro />} />
         <Route path="peladas" element={isAdmin ? <Peladas /> : <Navigate to="/" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />

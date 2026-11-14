@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from './supabase'
 import { hojeISO, somaMeses } from './format'
+import type { JogoJogado } from './pendencias'
 import type {
   FuncaoGoleiro, Jogador, Jogo, Pagamento, Pelada, Presenca, RankingCraque, RankingVencedor, ResultadoVotacao, StatusPresenca, Voto,
 } from './types'
@@ -303,4 +304,28 @@ export const useMeusVotos = (eleitorId: string | undefined, jogoIds: string[]) =
     enabled: Boolean(eleitorId) && jogoIds.length > 0,
     queryFn: async () =>
       ok(await supabase.from('votos').select('*').eq('eleitor_id', eleitorId!).in('jogo_id', jogoIds)) as Voto[],
+  })
+
+// ---------- Minhas pendências financeiras ----------
+/** Jogos realizados em que o jogador esteve presente (base das cobranças de avulso). */
+export const useMeusJogosJogados = (jogadorId: string | undefined) =>
+  useQuery({
+    queryKey: ['jogos', 'jogados', jogadorId],
+    enabled: Boolean(jogadorId),
+    queryFn: async () =>
+      ok(
+        await supabase
+          .from('presencas')
+          .select('jogo_id, jogos!inner(id, data, valor, status, peladas(nome, valor_avulso))')
+          .eq('jogador_id', jogadorId!)
+          .eq('status', 'confirmado')
+          .eq('jogos.status', 'realizado'),
+      ) as unknown as JogoJogado[],
+  })
+
+export const useMeusPagamentos = (jogadorId: string | undefined) =>
+  useQuery({
+    queryKey: ['pagamentos', 'meus', jogadorId],
+    enabled: Boolean(jogadorId),
+    queryFn: async () => ok(await supabase.from('pagamentos').select('*').eq('jogador_id', jogadorId!)) as Pagamento[],
   })

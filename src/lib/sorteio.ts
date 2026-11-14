@@ -108,10 +108,10 @@ export function sortear(entrada: Candidato[], rnd: () => number = Math.random): 
     vez = 1 - vez
   }
 
-  // sorteia qual time é o Grená, para não favorecer sempre o mesmo lado
-  const [grena, preto] = rnd() < 0.5 ? [a, b] : [b, a]
+  // sorteia qual grupo é o Branco, para não favorecer sempre o mesmo lado
+  const [branco, preto] = rnd() < 0.5 ? [a, b] : [b, a]
   return {
-    grena: escalar(grena),
+    branco: escalar(branco),
     preto: escalar(preto),
     reservas: reservas.map((c) => c.id),
     gerado_em: new Date().toISOString(),

@@ -53,7 +53,7 @@ Abra a URL no celular → Chrome: **Instalar app / Adicionar à tela inicial** �
 - No **primeiro login** o jogador escolhe a posição primária e a secundária tocando numa quadra em miniatura
   (Goleiro, Zagueiro, Ala, Meia, Atacante) e pode informar o **número da camisa** (fixo: não repete entre jogadores).
   Onde há camisa, o Elenco mostra o número no lugar das iniciais.
-- **Sorteio** (admin, na tela do jogo): divide os confirmados em *Time Grená* e *Time Preto* equilibrando as posições
+- **Sorteio** (admin, na tela do jogo): divide os confirmados em *Time Preto* (camisa com listra vertical grená) e *Time Branco* (off-white com listrado fino grená) equilibrando as posições
   e monta a escalação 2-3-1 num diagrama tático. Cada vaga usa a posição primária, depois a secundária; quem sobrar
   joga fora de posição (marcado em amarelo).
 - Com **mais de 14 confirmados**, entra primeiro quem tem **mais jogos no ano** (desempate aleatório). Para inverter

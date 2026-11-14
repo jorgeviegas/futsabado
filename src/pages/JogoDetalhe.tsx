@@ -12,7 +12,7 @@ import { Avatar, Erro, Modal, Spinner } from '../components/ui'
 import type { Escalado, FuncaoGoleiro, Jogador, StatusPresenca } from '../lib/types'
 import { POSICOES, moeda } from '../lib/format'
 
-const NOME_TIME = { grena: 'Time Grená', preto: 'Time Preto', empate: 'Empate' } as const
+const NOME_TIME = { branco: 'Time Branco', preto: 'Time Preto', empate: 'Empate' } as const
 const NOME_SLOT = { GOL: 'Goleiro', ZAG1: 'Zagueiro', ZAG2: 'Zagueiro', ALA1: 'Ala', ALA2: 'Ala', MEI: 'Meia', ATA: 'Atacante' } as const
 
 const OPCOES: { v: StatusPresenca; rot: string; cls: string }[] = [
@@ -336,11 +336,11 @@ function EditarJogo({ jogo, onFechar }: { jogo: NonNullable<ReturnType<typeof us
         <label>Valor individual (R$) — quem jogou fica devendo este valor
           <input type="number" min={0} step="0.01" value={f.valor} onChange={(e) => setF({ ...f, valor: e.target.value })} />
         </label>
-        <label>Placar<input value={f.placar} placeholder="Ex.: Grená 5 x 4 Preto" onChange={(e) => setF({ ...f, placar: e.target.value })} /></label>
+        <label>Placar<input value={f.placar} placeholder="Ex.: Branco 5 x 4 Preto" onChange={(e) => setF({ ...f, placar: e.target.value })} /></label>
         <label>Time vencedor
           <select value={f.time_vencedor} onChange={(e) => setF({ ...f, time_vencedor: e.target.value as typeof f.time_vencedor })}>
             <option value="">— não informado —</option>
-            <option value="grena">Time Grená</option>
+            <option value="branco">Time Branco</option>
             <option value="preto">Time Preto</option>
             <option value="empate">Empate</option>
           </select>
@@ -363,7 +363,7 @@ function Times({ jogo, jogadores, jogosAno }: { jogo: NonNullable<ReturnType<typ
       <h2>🎲 Times sorteados</h2>
       <Escalacao sorteio={sorteio} jogadores={jogadores} />
       <p className="muted">Formação 2-3-1. Contorno tracejado = jogando fora da posição.</p>
-      <TimeLista cor="grena" lista={sorteio.grena} por={por} venceu={venceu} />
+      <TimeLista cor="branco" lista={sorteio.branco} por={por} venceu={venceu} />
       <TimeLista cor="preto" lista={sorteio.preto} por={por} venceu={venceu} />
       {sorteio.reservas.length > 0 && (
         <div style={{ display: 'grid', gap: '.4rem' }}>
@@ -386,7 +386,7 @@ function Times({ jogo, jogadores, jogosAno }: { jogo: NonNullable<ReturnType<typ
 }
 
 function TimeLista({ cor, lista, por, venceu }: {
-  cor: 'grena' | 'preto'; lista: Escalado[]; por: Map<string, Jogador>; venceu: string | null
+  cor: 'branco' | 'preto'; lista: Escalado[]; por: Map<string, Jogador>; venceu: string | null
 }) {
   return (
     <div style={{ display: 'grid', gap: '.4rem' }}>
@@ -399,7 +399,7 @@ function TimeLista({ cor, lista, por, venceu }: {
         return (
           <div className="linha" key={e.id}>
             <span className="pos-tag">{NOME_SLOT[e.slot].slice(0, 3).toUpperCase()}</span>
-            <Avatar nome={j ? exibir(j) : '?'} numero={j?.numero_camisa} />
+            <Avatar nome={j ? exibir(j) : '?'} numero={j?.numero_camisa} time={cor} />
             <span className="grow">{j ? exibir(j) : '—'}</span>
             {e.fora && <span className="chip fora" title="Fora da posição preferida">fora de posição</span>}
           </div>

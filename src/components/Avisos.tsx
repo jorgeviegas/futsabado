@@ -1,17 +1,22 @@
 import { Link } from 'react-router-dom'
 import {
-  useJogadores, useJogos, useJogosSemEncerrar, useJogosVotacaoAberta, useMeusVotos, useMinhasPresencas,
+  useJogadores, useJogos, useJogosSemEncerrar, useJogosVotacaoAberta, useMeusJogosJogados, useMeusPagamentos,
+  useMeusVotos, useMinhasPresencas, usePeladas,
 } from '../lib/api'
 import { useAuth } from '../lib/auth'
-import { formatarData } from '../lib/format'
+import { formatarData, moeda } from '../lib/format'
+import { calcularPendencias, totalPendente } from '../lib/pendencias'
 
 interface Aviso {
   chave: string
   icone: string
   titulo: string
   detalhe?: string
+  linhas?: string[]
   to: string
   destaque?: boolean
+  /** Pendência financeira: destaque em vermelho. */
+  perigo?: boolean
 }
 
 /** Quadro de avisos: ações pendentes do jogador (e, para admins, da organização). */
@@ -26,7 +31,39 @@ export default function Avisos() {
   const { data: minhas = [] } = useMinhasPresencas(eu?.id, ids)
   const { data: meusVotos = [] } = useMeusVotos(eu?.id, abertas.map((j) => j.id))
 
+  const { data: peladas = [] } = usePeladas()
+  const { data: jogados = [] } = useMeusJogosJogados(eu?.id)
+  const { data: meusPagamentos = [] } = useMeusPagamentos(eu?.id)
+
   const avisos: Aviso[] = []
+
+  // 0) Pendência financeira do jogador logado (sempre em primeiro lugar)
+  if (eu) {
+    const pendencias = calcularPendencias({
+      eu, jogados, pagamentos: meusPagamentos,
+      valorMensalidade: peladas.find((p) => p.ativa)?.valor_mensalidade ?? 0,
+    })
+    if (pendencias.length > 0) {
+      avisos.push({
+        chave: 'financeiro', icone: '💸', perigo: true,
+        titulo: `Pagamento pendente: ${moeda(totalPendente(pendencias))}`,
+        linhas: [
+          ...pendencias.slice(0, 3).map((p) => `${p.rotulo} · ${moeda(p.valor)}`),
+          ...(pendencias.length > 3 ? [`e mais ${pendencias.length - 3}…`] : []),
+        ],
+        to: '/financeiro',
+      })
+    }
+    // 0b) Ainda sem posição (pulou a escolha): lembrar
+    if (!eu.posicao) {
+      avisos.push({
+        chave: 'posicao', icone: '📍', destaque: true,
+        titulo: 'Escolha sua posição na quadra',
+        detalhe: 'Isso ajuda no sorteio dos times.',
+        to: '/posicoes',
+      })
+    }
+  }
 
   // 1) Lembrete de votar no craque: jogo encerrado, votação aberta, eu estava presente e ainda não votei
   abertas.forEach((j) => {
@@ -94,11 +131,12 @@ export default function Avisos() {
     <section className="card avisos" aria-label="Quadro de avisos">
       <h2>📌 Quadro de avisos <span className="chip grena">{avisos.length}</span></h2>
       {avisos.map((a) => (
-        <Link key={a.chave} to={a.to} className={`aviso ${a.destaque ? 'destaque' : ''}`}>
+        <Link key={a.chave} to={a.to} className={`aviso ${a.destaque ? 'destaque' : ''} ${a.perigo ? 'perigo' : ''}`}>
           <span className="aviso-icone" aria-hidden>{a.icone}</span>
           <span className="grow">
             <strong>{a.titulo}</strong>
             {a.detalhe && <span className="muted" style={{ display: 'block' }}>{a.detalhe}</span>}
+            {a.linhas?.map((l) => <span key={l} className="muted" style={{ display: 'block' }}>{l}</span>)}
           </span>
           <span aria-hidden>›</span>
         </Link>

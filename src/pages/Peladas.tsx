@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useCriarJogoAvulso, useExcluirPelada, useGerarJogos, usePeladas, useSalvarPelada } from '../lib/api'
 import { DIAS, formatarHora, hojeISO, moeda } from '../lib/format'
+import { buscarLugar, type Lugar } from '../lib/clima'
 import { Erro, Modal, Spinner, Vazio } from '../components/ui'
 import type { Pelada } from '../lib/types'
 
@@ -66,6 +67,9 @@ function Form({ inicial, onFechar }: { inicial: Partial<Pelada>; onFechar: () =>
     valor_mensalidade: String(inicial.valor_mensalidade ?? 0),
     valor_avulso: String(inicial.valor_avulso ?? 0),
     liberar: String(inicial.liberar_confirmacao_dias ?? 2),
+    latitude: inicial.latitude ?? null,
+    longitude: inicial.longitude ?? null,
+    cidade: inicial.cidade ?? '',
     ativa: inicial.ativa ?? true,
   })
   return (
@@ -80,6 +84,7 @@ function Form({ inicial, onFechar }: { inicial: Partial<Pelada>; onFechar: () =>
               local: f.local.trim() || null, limite_jogadores: f.limite_jogadores ? Number(f.limite_jogadores) : null,
               valor_mensalidade: Number(f.valor_mensalidade) || 0, valor_avulso: Number(f.valor_avulso) || 0, ativa: f.ativa,
               liberar_confirmacao_dias: Math.min(6, Math.max(0, Number(f.liberar) || 0)),
+              latitude: f.latitude, longitude: f.longitude, cidade: f.latitude == null ? null : f.cidade || null,
             },
             { onSuccess: onFechar },
           )
@@ -101,6 +106,11 @@ function Form({ inicial, onFechar }: { inicial: Partial<Pelada>; onFechar: () =>
           <label>Mensalidade (R$)<input type="number" min={0} step="0.01" value={f.valor_mensalidade} onChange={(e) => setF({ ...f, valor_mensalidade: e.target.value })} /></label>
           <label>Valor individual por jogo (R$)<input type="number" min={0} step="0.01" value={f.valor_avulso} onChange={(e) => setF({ ...f, valor_avulso: e.target.value })} /></label>
         </div>
+        <LocalDoClima
+          cidade={f.latitude == null ? '' : f.cidade}
+          onEscolher={(l) => setF({ ...f, latitude: l.latitude, longitude: l.longitude, cidade: l.cidade })}
+          onLimpar={() => setF({ ...f, latitude: null, longitude: null, cidade: '' })}
+        />
         <label>Liberar a confirmação de presença (dias após o jogo anterior)
           <input type="number" min={0} max={6} value={f.liberar} onChange={(e) => setF({ ...f, liberar: e.target.value })} />
           <span className="muted">Ex.: 2 = segunda-feira para jogos de sábado; 1 = domingo. Admins confirmam a qualquer momento.</span>
@@ -135,5 +145,64 @@ function JogoExtra({ pelada, onFechar }: { pelada: Pelada; onFechar: () => void 
         <button className="btn" disabled={criar.isPending}>Criar jogo</button>
       </form>
     </Modal>
+  )
+}
+
+/** Admin escolhe a cidade/bairro da pelada; a previsão do tempo dos jogos usa esse local. */
+function LocalDoClima({ cidade, onEscolher, onLimpar }: {
+  cidade: string
+  onEscolher: (l: Lugar) => void
+  onLimpar: () => void
+}) {
+  const [busca, setBusca] = useState('')
+  const [resultados, setResultados] = useState<Lugar[] | null>(null)
+  const [buscando, setBuscando] = useState(false)
+  const [erro, setErro] = useState<unknown>(null)
+
+  async function procurar() {
+    if (busca.trim().length < 2) return
+    setBuscando(true)
+    setErro(null)
+    try {
+      setResultados(await buscarLugar(busca.trim()))
+    } catch (e) {
+      setErro(e)
+    } finally {
+      setBuscando(false)
+    }
+  }
+
+  return (
+    <div className="form">
+      <span className="muted">Local para a previsão do tempo</span>
+      {cidade ? (
+        <div className="linha entre">
+          <strong>📍 {cidade}</strong>
+          <button type="button" className="btn sec peq" onClick={onLimpar}>Trocar</button>
+        </div>
+      ) : (
+        <>
+          <div className="linha">
+            <input
+              value={busca} placeholder="Cidade ou bairro (ex.: Porto Alegre)"
+              onChange={(e) => setBusca(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), procurar())}
+            />
+            <button type="button" className="btn sec" disabled={buscando} onClick={procurar}>{buscando ? '…' : 'Buscar'}</button>
+          </div>
+          {resultados?.length === 0 && <span className="muted">Nada encontrado. Tente só o nome da cidade.</span>}
+          {resultados?.map((l) => (
+            <button
+              type="button" className="lugar-res" key={`${l.latitude},${l.longitude}`}
+              onClick={() => { onEscolher(l); setResultados(null); setBusca('') }}
+            >
+              📍 {l.rotulo}
+            </button>
+          ))}
+          <Erro erro={erro} />
+          <span className="muted">Sem local definido, os jogos ficam sem previsão do tempo.</span>
+        </>
+      )}
+    </div>
   )
 }

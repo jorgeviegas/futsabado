@@ -91,6 +91,8 @@ Abra a URL no celular → Chrome: **Instalar app / Adicionar à tela inicial** �
 - **Financeiro:** todos veem o *Caixa do time* (saldo, entradas e saídas) em somente leitura e as próprias pendências.
   Admins têm ainda *Cobranças* (confirmar/desfazer pagamentos de todos, de qualquer mês do ano) e *Lançar* (entradas e
   saídas avulsas). Pagamentos confirmados entram no caixa automaticamente.
+- **Clima:** o admin define a cidade da pelada (busca pela Open-Meteo, gratuita e sem chave) e cada próximo jogo mostra
+  a temperatura e a condição do tempo previstas para a hora marcada, até 15 dias à frente.
 - **Rankings:** top 5 de craques, de maiores vencedores e de **assiduidade** (mais presenças no ano).
 
 ## Fluxo de uso

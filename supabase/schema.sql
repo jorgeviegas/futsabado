@@ -180,6 +180,15 @@ alter table public.pagamentos drop constraint if exists pagamentos_convidado_che
 alter table public.pagamentos add constraint pagamentos_convidado_check check ((tipo = 'convidado') = (convidado_id is not null));
 create unique index if not exists pagamentos_convidado_uk on public.pagamentos (convidado_id) where tipo = 'convidado';
 
+-- v6: local da pelada para a previsão do tempo (coordenadas escolhidas pelo admin)
+alter table public.peladas add column if not exists latitude numeric(9,6);
+alter table public.peladas add column if not exists longitude numeric(9,6);
+alter table public.peladas add column if not exists cidade text;
+alter table public.peladas drop constraint if exists peladas_coord_check;
+alter table public.peladas add constraint peladas_coord_check
+  check ((latitude is null) = (longitude is null)
+         and (latitude is null or (latitude between -90 and 90 and longitude between -180 and 180)));
+
 -- Caixa do time: entradas e saídas avulsas (as mensalidades/jogos pagos entram automaticamente no extrato).
 create table if not exists public.caixa_lancamentos (
   id          uuid primary key default gen_random_uuid(),

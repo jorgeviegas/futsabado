@@ -32,6 +32,10 @@ export interface Pelada {
   valor_avulso: number
   /** Dias após o jogo anterior em que a confirmação de presença abre (2 = segunda, para jogos de sábado). */
   liberar_confirmacao_dias: number
+  /** Local para a previsão do tempo (escolhido pelo admin). */
+  latitude: number | null
+  longitude: number | null
+  cidade: string | null
   ativa: boolean
 }
 
@@ -69,7 +73,7 @@ export interface Jogo {
   sorteio: Sorteio | null
   time_vencedor: TimeCor | 'empate' | null
   observacoes: string | null
-  peladas?: Pick<Pelada, 'nome' | 'limite_jogadores' | 'valor_avulso'> | null
+  peladas?: Pick<Pelada, 'nome' | 'limite_jogadores' | 'valor_avulso' | 'latitude' | 'longitude' | 'cidade'> | null
 }
 
 /** Goleiro com posição secundária escolhe se joga no gol ou na linha. */

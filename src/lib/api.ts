@@ -76,7 +76,7 @@ export const useGerarJogos = () =>
   )
 
 // ---------- Jogos ----------
-const JOGO_SELECT = '*, peladas(nome, limite_jogadores, valor_avulso)'
+const JOGO_SELECT = '*, peladas(nome, limite_jogadores, valor_avulso, latitude, longitude, cidade)'
 
 /** Próximo jogo (o mais próximo ainda por acontecer). */
 export const useProximoJogo = () =>

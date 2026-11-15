@@ -59,3 +59,10 @@ export function placarTexto(j: { placar_branco: number | null; placar_preto: num
 export function confirmacaoLiberada(liberaEm: string | null | undefined): boolean {
   return !liberaEm || hojeISO() >= liberaEm
 }
+
+/** Soma (ou subtrai) dias a uma data 'YYYY-MM-DD'. */
+export function somaDias(iso: string, n: number): string {
+  const d = parseData(iso)
+  d.setDate(d.getDate() + n)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}

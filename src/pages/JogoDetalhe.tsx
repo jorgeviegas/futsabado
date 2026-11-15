@@ -7,6 +7,7 @@ import {
 } from '../lib/api'
 import { sortear } from '../lib/sorteio'
 import Escalacao from '../components/Escalacao'
+import ClimaJogo from '../components/ClimaJogo'
 import { useAuth } from '../lib/auth'
 import { confirmacaoLiberada, exibir, formatarData, formatarHora, hojeISO, placarTexto } from '../lib/format'
 import { Avatar, Erro, Modal, Spinner } from '../components/ui'
@@ -90,6 +91,7 @@ export default function JogoDetalhe() {
         <div className="muted">
           {formatarData(jogo.data)} às {formatarHora(jogo.horario)}{jogo.local && ` · ${jogo.local}`}
         </div>
+        <ClimaJogo jogo={jogo} grande />
         {jogo.valor != null && <div className="muted">💵 {moeda(jogo.valor)} por jogador</div>}
         {placarTexto(jogo) && <div style={{ fontSize: '1.15rem' }}><strong>{placarTexto(jogo)}</strong></div>}
         {jogo.time_vencedor && <div className="muted">{jogo.time_vencedor === 'empate' ? 'Empate' : `Vitória do ${NOME_TIME[jogo.time_vencedor]}`}</div>}

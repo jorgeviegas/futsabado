@@ -5,6 +5,7 @@ import { useAuth } from '../lib/auth'
 import { confirmacaoLiberada, formatarData, formatarHora, placarTexto } from '../lib/format'
 import { Erro, Spinner, Vazio } from '../components/ui'
 import Avisos from '../components/Avisos'
+import ClimaJogo from '../components/ClimaJogo'
 import type { Jogo } from '../lib/types'
 
 type Aba = 'jogos' | 'resultados'
@@ -109,9 +110,12 @@ function CartaoJogo({ jogo, participantes, pres }: { jogo: Jogo; participantes: 
         {jogo.status === 'agendado' && !bloqueado && minha === 'ausente' && <span className="chip erro">Ausente</span>}
         {jogo.status === 'agendado' && !bloqueado && !minha && <span className="chip grena">Responder</span>}
       </div>
-      <div className="muted">
-        {formatarData(jogo.data)} · {formatarHora(jogo.horario)}
-        {jogo.local && ` · ${jogo.local}`}
+      <div className="linha entre wrap">
+        <div className="muted">
+          {formatarData(jogo.data)} · {formatarHora(jogo.horario)}
+          {jogo.local && ` · ${jogo.local}`}
+        </div>
+        <ClimaJogo jogo={jogo} />
       </div>
       {jogo.status === 'realizado' && <Placar jogo={jogo} />}
       <div className="muted">

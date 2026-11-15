@@ -107,6 +107,13 @@ Abra a URL no celular → Chrome: **Instalar app / Adicionar à tela inicial** �
   saídas avulsas). Pagamentos confirmados entram no caixa automaticamente.
 - **Clima:** o admin define a cidade da pelada (busca pela Open-Meteo, gratuita e sem chave) e cada próximo jogo mostra
   a temperatura e a condição do tempo previstas para a hora marcada, até 15 dias à frente.
+- **Player Score (só admins):** nota de 0 a 1000 por jogador (novos começam em 500), recalculada a cada encerramento de
+  partida e quando uma votação fecha. Aparece como ⭐ no *Elenco* para admins; o banco só entrega a tabela
+  `jogador_scores` a admins. Combina aproveitamento de vitórias, gols/assistências (comparados aos da mesma posição),
+  gols sofridos (peso alto para goleiro e zagueiro), votos de craque e assiduidade, com pesos por posição; com poucos
+  jogos a nota fica perto de 500. A fórmula e os pesos estão comentados na função `recalcular_scores()` do `schema.sql`.
+  O **sorteio** usa o score para equilibrar os times (mantendo as posições divididas e os times com no máximo 1 jogador
+  de diferença); convidados contam como 500.
 - **Gols e assistências:** ao encerrar o jogo (ou reabrir o placar), o admin lista quem jogou, marca quem faltou e usa os
   contadores ⚽ e 🍽️ de cada jogador. Só o admin altera esses números.
 - **Rankings:** top 5 de craques, **artilheiros ⚽** e **garçons 🍽️ (assistências)** do ano, de maiores vencedores, de **assiduidade** (mais presenças no ano) e de **goleiros menos

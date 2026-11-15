@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useExcluirJogador, useJogadores, useSalvarJogador } from '../lib/api'
+import { useExcluirJogador, useJogadores, useSalvarJogador, useScores } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { POSICOES, exibir } from '../lib/format'
 import { Avatar, Erro, Modal, Spinner } from '../components/ui'
@@ -11,6 +11,7 @@ export default function Jogadores() {
   const { data, isLoading, error } = useJogadores()
   const [editando, setEditando] = useState<Partial<Jogador> | null>(null)
   const salvar = useSalvarJogador()
+  const { data: scores } = useScores(isAdmin)
 
   if (isLoading) return <Spinner />
   if (error) return <Erro erro={error} />
@@ -35,12 +36,12 @@ export default function Jogadores() {
         </div>
       )}
 
-      {ativos.map((j) => <Linha key={j.id} j={j} euId={eu?.id} admin={isAdmin} onEditar={() => setEditando(j)} />)}
+      {ativos.map((j) => <Linha key={j.id} j={j} euId={eu?.id} admin={isAdmin} score={scores?.[j.id]} onEditar={() => setEditando(j)} />)}
 
       {isAdmin && inativos.length > 0 && (
         <>
           <h2>Inativos</h2>
-          {inativos.map((j) => <Linha key={j.id} j={j} euId={eu?.id} admin onEditar={() => setEditando(j)} />)}
+          {inativos.map((j) => <Linha key={j.id} j={j} euId={eu?.id} admin score={scores?.[j.id]} onEditar={() => setEditando(j)} />)}
         </>
       )}
 
@@ -50,7 +51,7 @@ export default function Jogadores() {
   )
 }
 
-function Linha({ j, euId, admin, onEditar }: { j: Jogador; euId?: string; admin: boolean; onEditar: () => void }) {
+function Linha({ j, euId, admin, score, onEditar }: { j: Jogador; euId?: string; admin: boolean; score?: number; onEditar: () => void }) {
   const podeEditar = admin || j.id === euId
   return (
     <div className="card link" onClick={podeEditar ? onEditar : undefined}>
@@ -65,6 +66,7 @@ function Linha({ j, euId, admin, onEditar }: { j: Jogador; euId?: string; admin:
             {admin && j.telefone ? ` · ${j.telefone}` : ''}
           </div>
         </div>
+        {admin && score !== undefined && <span className="chip" title="Player Score (visível só para admins)">⭐ {score}</span>}
         {j.is_admin && <span className="chip grena">admin</span>}
         <span className="chip">{j.tipo}</span>
       </div>

@@ -346,6 +346,17 @@ export const useRankingGoleiros = (limite = 5) =>
     },
   })
 
+/** Player Score por jogador (0-1000). A tabela só devolve linhas para admins; para os demais fica vazio. */
+export const useScores = (habilitado: boolean) =>
+  useQuery({
+    queryKey: ['scores'],
+    enabled: habilitado,
+    queryFn: async () => {
+      const rows = ok(await supabase.from('jogador_scores').select('jogador_id, score')) as { jogador_id: string; score: number }[]
+      return Object.fromEntries(rows.map((r) => [r.jogador_id, r.score])) as Record<string, number>
+    },
+  })
+
 /** Jogos realizados no ano em que cada jogador esteve presente (desempate do sorteio). */
 export const useJogosNoAno = () =>
   useQuery({
@@ -509,7 +520,7 @@ export const useEncerrarJogo = () =>
           p_estatisticas: v.estatisticas ?? null,
         }),
       ),
-    [['jogos'], ['jogo'], ['presencas'], ['convidados'], ['voto'], ['totalVotos'], ['resultado'], ['cobrancas'], ['ranking'], ['jogosNoAno'], ['pagosJogo'], ['caixa']],
+    [['jogos'], ['jogo'], ['presencas'], ['convidados'], ['voto'], ['totalVotos'], ['resultado'], ['cobrancas'], ['ranking'], ['jogosNoAno'], ['pagosJogo'], ['caixa'], ['scores']],
   )
 
 /** Quem já pagou neste jogo: "id do jogador" ou "c_<id do convidado>" (todos os membros veem o ✓). */

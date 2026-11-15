@@ -318,6 +318,19 @@ create trigger presencas_protege_estat
   before insert or update on public.presencas
   for each row execute function public.presencas_protege_estatisticas();
 
+-- v16: Player Score (0 a 1000, começa em 500). Visível só para admins; calculado por recalcular_scores().
+create table if not exists public.jogador_scores (
+  jogador_id    uuid primary key references public.jogadores(id) on delete cascade,
+  score         int not null default 500 check (score between 0 and 1000),
+  jogos         int not null default 0,
+  detalhes      jsonb,
+  atualizado_em timestamptz not null default now()
+);
+alter table public.jogador_scores enable row level security;
+drop policy if exists jogador_scores_select on public.jogador_scores;
+create policy jogador_scores_select on public.jogador_scores for select to authenticated using (public.is_admin());
+-- (sem políticas de escrita: só as funções do banco gravam)
+
 -- Caixa do time: entradas e saídas avulsas (as mensalidades/jogos pagos entram automaticamente no extrato).
 create table if not exists public.caixa_lancamentos (
   id          uuid primary key default gen_random_uuid(),
@@ -1253,6 +1266,8 @@ begin
          placar_preto  = coalesce(p_placar_preto, placar_preto),
          status = case when status = 'agendado' then 'realizado' else status end
    where id = p_jogo_id;
+
+  perform public.recalcular_scores();   -- o Player Score é atualizado a cada encerramento
 end;
 $$;
 
@@ -1712,6 +1727,141 @@ begin
 end;
 $$;
 
+
+-- ---------------------------------------------------------------------
+-- PLAYER SCORE
+-- Nota de 0 a 1000 por jogador (novos começam em 500), recalculada a cada encerramento de partida.
+-- Fatores (cada um vira uma nota de 0 a 1, onde 0,5 = "na média do grupo"):
+--   vitórias   : aproveitamento em jogos sorteados (vitória = 1, empate = 0,5), com 4 jogos "de aposta" neutros;
+--   ataque     : (gols + 0,75 × assistências) por jogo, comparado à média dos jogadores da MESMA posição;
+--   defesa     : gols sofridos pelo time por jogo, comparado à média geral (vale muito para goleiro/zagueiro);
+--   craque     : parte dos votos de craque recebidos nos jogos em que jogou (só votações já encerradas);
+--   assiduidade: frequência desde o cadastro, comparada à média.
+-- Cada posição dá um peso diferente a cada fator (tabela `pesos` abaixo).
+-- Confiança: com poucos jogos a nota fica perto de 500 (jogos / (jogos + 6)); a diferença para 500 é amplificada
+-- por ESCALA. Ajuste os números abaixo para calibrar.
+-- ---------------------------------------------------------------------
+create or replace function public.time_do_jogador(p_sorteio jsonb, p_id uuid)
+returns text language sql immutable as $$
+  select case
+    when p_sorteio is null then null
+    when exists (select 1 from jsonb_array_elements(coalesce(p_sorteio -> 'branco', '[]'::jsonb)) e where e ->> 'id' = p_id::text)
+      or exists (select 1 from jsonb_array_elements(coalesce(p_sorteio -> 'reservas_branco', '[]'::jsonb)) r where r #>> '{}' = p_id::text)
+      then 'branco'
+    when exists (select 1 from jsonb_array_elements(coalesce(p_sorteio -> 'preto', '[]'::jsonb)) e where e ->> 'id' = p_id::text)
+      or exists (select 1 from jsonb_array_elements(coalesce(p_sorteio -> 'reservas_preto', '[]'::jsonb)) r where r #>> '{}' = p_id::text)
+      then 'preto'
+  end
+$$;
+
+create or replace function public.recalcular_scores()
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  ESCALA constant numeric := 1.5;   -- amplifica o desvio em relação a 500
+  PESO_CONFIANCA constant numeric := 6;
+begin
+  with linhas as (
+    select pr.jogador_id, g.id as jogo_id, pr.gols, pr.assistencias, g.votacao_aberta,
+           public.time_do_jogador(g.sorteio, pr.jogador_id) as time,
+           g.placar_branco, g.placar_preto, g.time_vencedor
+      from public.presencas pr
+      join public.jogos g on g.id = pr.jogo_id
+     where pr.status = 'confirmado' and g.status = 'realizado'
+  ),
+  lv as (
+    select l.*,
+      case when l.time = 'branco' then l.placar_preto when l.time = 'preto' then l.placar_branco end as sofridos,
+      case when l.time is not null and l.time_vencedor is not null
+           then case when l.time_vencedor = 'empate' then 'e' when l.time_vencedor = l.time then 'v' else 'd' end end as res,
+      (select count(*) from public.votos v where v.jogo_id = l.jogo_id and v.votado_id = l.jogador_id) as votos,
+      (select count(*) from public.votos v where v.jogo_id = l.jogo_id) as votos_total
+    from linhas l
+  ),
+  agg as (
+    select jogador_id, count(*) as n,
+           sum(gols) as gols, sum(assistencias) as assist,
+           count(*) filter (where res = 'v') as w, count(*) filter (where res = 'e') as e, count(*) filter (where res = 'd') as d,
+           avg(sofridos) as sofridos_pj,
+           sum(votos) filter (where not votacao_aberta) as v_rec,
+           sum(votos_total) filter (where not votacao_aberta) as v_tot
+      from lv group by jogador_id
+  ),
+  m as (
+    select j.id, a.n, a.w, a.e, a.d, a.sofridos_pj, a.v_rec, a.v_tot,
+           case j.posicao when 'goleiro' then 'gk' when 'zagueiro' then 'def' when 'atacante' then 'atk' else 'mid' end as classe,
+           (coalesce(a.gols, 0) + 0.75 * coalesce(a.assist, 0)) / nullif(a.n, 0) as c_ataque,
+           case when a.v_tot > 0 then a.v_rec::numeric / a.v_tot end as share,
+           a.n::numeric / greatest(1, (select count(*) from public.jogos x where x.status = 'realizado' and x.data >= j.created_at::date)) as freq
+      from public.jogadores j left join agg a on a.jogador_id = j.id
+  ),
+  ref as (
+    select m.*,
+           avg(c_ataque) over (partition by classe) as med_ataque,
+           avg(share) over () as med_share,
+           avg(case when n > 0 then freq end) over () as med_freq,
+           avg(sofridos_pj) over () as med_sofridos
+      from m
+  ),
+  nota as (
+    select r.*,
+      -- cada componente: 0..1, 0,5 = média
+      (coalesce(w, 0) + 0.5 * coalesce(e, 0) + 2) / (coalesce(w, 0) + coalesce(e, 0) + coalesce(d, 0) + 4) as c_vit,
+      case when c_ataque is null or med_ataque is null or med_ataque <= 0 then 0.5
+           else (c_ataque / med_ataque) / (c_ataque / med_ataque + 1) end as c_ata,
+      case when sofridos_pj is null or med_sofridos is null then 0.5
+           else ((med_sofridos + 0.5) / (sofridos_pj + 0.5)) / ((med_sofridos + 0.5) / (sofridos_pj + 0.5) + 1) end as c_def,
+      -- craque: parte dos votos com 10 votos "de aposta" na média (quem não recebeu nenhum não zera a nota)
+      case when med_share is null or med_share <= 0 then 0.5
+           else (((coalesce(v_rec, 0) + 10 * med_share) / (coalesce(v_tot, 0) + 10)) / med_share)
+                / (((coalesce(v_rec, 0) + 10 * med_share) / (coalesce(v_tot, 0) + 10)) / med_share + 1) end as c_cra,
+      case when n is null or n = 0 or med_freq is null or med_freq <= 0 then 0.5
+           else (freq / med_freq) / (freq / med_freq + 1) end as c_ass
+    from ref r
+  ),
+  pesos as (   -- vitórias, ataque, defesa, craque, assiduidade
+    select n.*,
+      case classe when 'gk'  then array[30, 0, 40, 15, 15]
+                  when 'def' then array[30, 10, 30, 20, 10]
+                  when 'atk' then array[25, 45, 0, 20, 10]
+                  else            array[30, 30, 5, 25, 10] end as p
+    from nota n
+  ),
+  final as (
+    select id, coalesce(n, 0) as jogos,
+           (p[1] * c_vit + p[2] * c_ata + p[3] * c_def + p[4] * c_cra + p[5] * c_ass) / 100.0 as bruto,
+           jsonb_build_object('vitorias', round(c_vit, 3), 'ataque', round(c_ata, 3), 'defesa', round(c_def, 3),
+                              'craque', round(c_cra, 3), 'assiduidade', round(c_ass, 3), 'classe', classe) as detalhes
+      from pesos
+  )
+  insert into public.jogador_scores (jogador_id, score, jogos, detalhes, atualizado_em)
+  select id,
+         greatest(0, least(1000, round(500 + 1000 * (bruto - 0.5) * (jogos / (jogos + PESO_CONFIANCA)) * ESCALA)))::int,
+         jogos, detalhes, now()
+    from final
+  on conflict (jogador_id) do update
+     set score = excluded.score, jogos = excluded.jogos, detalhes = excluded.detalhes, atualizado_em = excluded.atualizado_em;
+end;
+$$;
+
+-- Votação encerrada ou resultado alterado: recalcula (os votos só entram no score depois que a votação fecha).
+create or replace function public.jogos_atualiza_scores()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  perform public.recalcular_scores();
+  return null;
+end;
+$$;
+drop trigger if exists jogos_scores on public.jogos;
+create trigger jogos_scores
+  after update on public.jogos
+  for each row
+  when (old.votacao_aberta is distinct from new.votacao_aberta or old.status is distinct from new.status
+        or old.placar_branco is distinct from new.placar_branco or old.placar_preto is distinct from new.placar_preto
+        or old.sorteio is distinct from new.sorteio)
+  execute function public.jogos_atualiza_scores();
+
+select public.recalcular_scores();   -- primeira carga / sempre que o schema é reaplicado
+
 -- Permissões de execução das funções
 revoke execute on function public.gerar_jogos(uuid, int) from public, anon;
 revoke execute on function public.resultado_votacao(uuid) from public, anon;
@@ -1738,6 +1888,8 @@ revoke execute on function public.vagas_ocupadas(uuid, uuid) from public, anon, 
 revoke execute on function public.remover_faltoso(uuid, uuid) from public, anon;
 revoke execute on function public.encerrar_jogo(uuid, uuid[], uuid[], int, int, jsonb) from public, anon;
 revoke execute on function public.ranking_artilheiros(int, int) from public, anon;
+revoke execute on function public.recalcular_scores() from public, anon, authenticated;
+revoke execute on function public.jogos_atualiza_scores() from public, anon, authenticated;
 revoke execute on function public.ranking_assistentes(int, int) from public, anon;
 revoke execute on function public.pagamentos_do_jogo(uuid) from public, anon;
 revoke execute on function public.remover_convidado(uuid) from public, anon;

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   useAdicionarConvidado, useAtualizarJogo, useConvidados, useDefinirPresenca, useExcluirJogo, useJogadores, useJogo,
-  useJogosNoAno, useLiberacao, useMeuVoto, usePresencas, useRemoverConvidado, useRemoverFaltoso, useResultado,
+  useJogosNoAno, useLiberacao, useScores, useMeuVoto, usePresencas, useRemoverConvidado, useRemoverFaltoso, useResultado,
   useTotalVotos, useVotar, usePagosDoJogo,
 } from '../lib/api'
 import { sortear } from '../lib/sorteio'
@@ -38,6 +38,7 @@ export default function JogoDetalhe() {
   const [escolhendoFuncao, setEscolhendoFuncao] = useState(false)
   const [encerrando, setEncerrando] = useState(false)
   const { data: jogosAno = {} } = useJogosNoAno()
+  const { data: scores = {} } = useScores(isAdmin)
   const { data: convidados = [] } = useConvidados(id)
   const { data: liberaEm } = useLiberacao(id)
   const { data: pagos } = usePagosDoJogo(id, jogo?.status === 'realizado')
@@ -83,7 +84,7 @@ export default function JogoDetalhe() {
     if (jogo!.sorteio && !confirm('Já existe um sorteio. Sortear de novo e substituir?')) return
     const sorteio = sortear(
       participantes.map((j) => ({
-        id: j.id, posicao: j.posicao, posicao_secundaria: j.posicao_secundaria, jogosAno: jogosAno[j.id] ?? 0,
+        id: j.id, posicao: j.posicao, posicao_secundaria: j.posicao_secundaria, jogosAno: jogosAno[j.id] ?? 0, score: scores[j.id],
         funcao: pres.find((p) => p.jogador_id === j.id)?.funcao,
       })),
     )

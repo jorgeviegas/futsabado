@@ -7,6 +7,13 @@ import type { Escalado, Posicao, Slot, Sorteio } from './types'
  */
 export const TAMANHO_TIME = 7
 
+/** Score de quem não tem nota (convidados, novatos). */
+export const SCORE_PADRAO = 500
+/** Variação aleatória (em pontos de score) aplicada só na ordenação, para os sorteios não saírem sempre iguais. */
+export const RUIDO_SCORE = 60
+/** Diferença de soma de scores (entre os times) abaixo da qual o lado é sorteado, em vez de sempre ajudar o mais fraco. */
+export const TOLERANCIA_SCORE = 120
+
 export const SLOTS: Slot[] = ['GOL', 'ZAG1', 'ZAG2', 'ALA1', 'MEI', 'ALA2', 'ATA']
 
 export const POSICAO_DO_SLOT: Record<Slot, Posicao> = {
@@ -32,6 +39,8 @@ export interface Candidato {
   posicao: Posicao | null
   posicao_secundaria: Posicao | null
   jogosAno: number
+  /** Player Score (0-1000; 500 = sem informação). Só admins enxergam; usado para equilibrar os times. */
+  score?: number
   /** Só vale para goleiro com posição secundária: 'linha' = hoje joga na linha. */
   funcao?: 'gol' | 'linha' | null
   /** (interno) tipo de vaga em que foi escolhido como titular. */
@@ -120,16 +129,35 @@ export function sortear(entrada: Candidato[], rnd: () => number = Math.random): 
   const candidatos = entrada.map(aplicarFuncao)
   const { titulares, reservas } = separarTitulares(candidatos, rnd)
 
-  // Agrupa por posição primária e distribui alternando entre os times (A, B, A, B…),
-  // assim cada posição fica dividida por igual e os times têm no máximo 1 jogador de diferença.
-  const sequencia = embaralhar(titulares, rnd).sort((a, b) => grupo(a) - grupo(b))
-  const a: Candidato[] = []
-  const b: Candidato[] = []
-  let vez = rnd() < 0.5 ? 0 : 1
+  // Por posição (goleiros, atacantes, meias, zagueiros, alas), do mais forte ao mais fraco, cada jogador vai para o
+  // time mais "fraco" no momento (menor soma de scores). Regras, nesta ordem:
+  //   1) os times nunca diferem em mais de 1 jogador;
+  //   2) cada posição fica dividida por igual (quem está atrás na posição recebe);
+  //   3) em caso de igualdade, vai para o time com menor soma de scores (se a diferença já for pequena, sorteia).
+  // O score usado para ORDENAR recebe um ruído de ±RUIDO_SCORE para que cada sorteio possa dar times diferentes.
+  const score = (c: Candidato) => c.score ?? SCORE_PADRAO
+  const sequencia = embaralhar(titulares, rnd)
+    .map((c) => ({ c, chave: score(c) + (rnd() * 2 - 1) * RUIDO_SCORE }))
+    .sort((x, y) => grupo(x.c) - grupo(y.c) || y.chave - x.chave)
+    .map((x) => x.c)
+  const times: Candidato[][] = [[], []]
+  const soma = [0, 0]
+  const porGrupo: Record<number, number[]> = {}
   for (const c of sequencia) {
-    ;(vez === 0 ? a : b).push(c)
-    vez = 1 - vez
+    const g = grupo(c)
+    const qtd = (porGrupo[g] ??= [0, 0])
+    const podem = [0, 1].filter((t) => times[t].length <= times[1 - t].length)
+    let t = podem[0]
+    if (podem.length === 2) {
+      if (qtd[0] !== qtd[1]) t = qtd[0] < qtd[1] ? 0 : 1
+      else if (Math.abs(soma[0] - soma[1]) > TOLERANCIA_SCORE) t = soma[0] < soma[1] ? 0 : 1
+      else t = rnd() < 0.5 ? 0 : 1
+    }
+    times[t].push(c)
+    qtd[t]++
+    soma[t] += score(c)
   }
+  const [a, b] = times
 
   // sorteia qual grupo é o Branco, para não favorecer sempre o mesmo lado
   const [branco, preto] = rnd() < 0.5 ? [a, b] : [b, a]

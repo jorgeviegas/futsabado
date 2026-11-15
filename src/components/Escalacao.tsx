@@ -1,21 +1,59 @@
 import { exibir } from '../lib/format'
 import type { Escalado, Jogador, Slot, Sorteio } from '../lib/types'
 
-// Posição de cada vaga na metade do time (x: 0–100 | y: distância do próprio gol, 0–70). Formação 2-3-1.
+// Posição de cada vaga na metade do time (x: 0–100 | y: distância do próprio gol, 0–88). Formação 2-3-1.
+// O espaçamento vertical deixa folga para o nome ocupar até 2 linhas sem encostar na fileira seguinte.
 const COORD: Record<Slot, { x: number; y: number }> = {
   GOL: { x: 50, y: 9 },
-  ZAG1: { x: 28, y: 24 },
-  ZAG2: { x: 72, y: 24 },
-  ALA1: { x: 11, y: 41 },
-  MEI: { x: 50, y: 43 },
-  ALA2: { x: 89, y: 41 },
-  ATA: { x: 50, y: 66 },
+  ZAG1: { x: 26, y: 24 },
+  ZAG2: { x: 74, y: 24 },
+  ALA1: { x: 11, y: 47 },
+  MEI: { x: 50, y: 49 },
+  ALA2: { x: 89, y: 47 },
+  ATA: { x: 50, y: 72 },
 }
 
-const ALTURA = 160
+const ALTURA = 176
 
-function curto(txt: string, max = 9) {
-  return txt.length > max ? txt.slice(0, max - 1) + '…' : txt
+// Largura máxima do nome (em unidades do campo) por vaga: o que cabe sem invadir o vizinho da mesma fileira.
+const LARGURA_NOME: Record<Slot, number> = { GOL: 33, ZAG1: 44, ZAG2: 44, ALA1: 22, ALA2: 22, MEI: 52, ATA: 70 }
+
+const FONTE = 3.5
+const FONTE_MIN = 2.4
+const LARGURA_CHAR = 0.6 // largura média de um caractere, em múltiplos do tamanho da fonte
+const larguraTexto = (t: string, fonte: number) => t.length * LARGURA_CHAR * fonte
+
+/**
+ * Nome completo em até 2 linhas: quebra no espaço que melhor equilibra as linhas;
+ * se ainda não couber (palavra muito longa), reduz a fonte; só abrevia como último recurso.
+ */
+function quebrarNome(nome: string, largura: number): { linhas: string[]; fonte: number } {
+  const limpo = nome.trim().replace(/\s+/g, ' ')
+  if (larguraTexto(limpo, FONTE) <= largura) return { linhas: [limpo], fonte: FONTE }
+
+  const palavras = limpo.split(' ')
+  let linhas = [limpo]
+  if (palavras.length > 1) {
+    let melhor = Infinity
+    for (let i = 1; i < palavras.length; i++) {
+      const a = palavras.slice(0, i).join(' ')
+      const b = palavras.slice(i).join(' ')
+      const pior = Math.max(a.length, b.length)
+      if (pior < melhor) {
+        melhor = pior
+        linhas = [a, b]
+      }
+    }
+  }
+
+  const maior = Math.max(...linhas.map((l) => l.length))
+  let fonte = Math.min(FONTE, (largura / (maior * LARGURA_CHAR)) * 0.98)
+  if (fonte < FONTE_MIN) {
+    fonte = FONTE_MIN
+    const maxChars = Math.max(3, Math.floor(largura / (LARGURA_CHAR * fonte)))
+    linhas = linhas.map((l) => (l.length > maxChars ? l.slice(0, maxChars - 1) + '…' : l))
+  }
+  return { linhas, fonte }
 }
 
 function Jogador_({ e, j, cor, baixo }: { e: Escalado; j?: Jogador; cor: 'branco' | 'preto'; baixo: boolean }) {
@@ -23,6 +61,10 @@ function Jogador_({ e, j, cor, baixo }: { e: Escalado; j?: Jogador; cor: 'branco
   const y = baixo ? ALTURA - gy : gy // time de baixo ataca para cima; o de cima, para baixo
   const nome = j ? exibir(j) : '?'
   const rotulo = j?.numero_camisa != null ? String(j.numero_camisa) : nome.trim().slice(0, 2).toUpperCase()
+  const { linhas, fonte } = quebrarNome(nome, LARGURA_NOME[e.slot])
+  const passo = fonte * 1.05 // distância entre as linhas
+  // o nome fica sempre do lado do centro do campo; com 2 linhas, a última encosta no mesmo ponto de antes
+  const y0 = baixo ? y - 8.4 - (linhas.length - 1) * passo : y + 11
   return (
     <g>
       <circle cx={x} cy={y} r="6.2" fill={e.slot === 'GOL' ? 'url(#uniforme-goleiro)' : `url(#uniforme-${cor})`} stroke={e.fora ? '#e0a526' : cor === 'preto' ? '#000' : '#fff'} strokeWidth="0.9" strokeDasharray={e.fora ? '1.6 1' : undefined} />
@@ -32,8 +74,10 @@ function Jogador_({ e, j, cor, baixo }: { e: Escalado; j?: Jogador; cor: 'branco
       >
         {rotulo}
       </text>
-      <text x={x} y={baixo ? y - 8.4 : y + 11} textAnchor="middle" fontSize="3.5" fontWeight="600" fill="#fff" stroke="#000" strokeWidth="0.5" paintOrder="stroke">
-        {curto(nome)}
+      <text x={x} y={y0} textAnchor="middle" fontSize={fonte} fontWeight="600" fill="#fff" stroke="#000" strokeWidth="0.5" paintOrder="stroke" data-nome>
+        {linhas.map((l, i) => (
+          <tspan key={i} x={x} dy={i === 0 ? 0 : passo}>{l}</tspan>
+        ))}
       </text>
     </g>
   )

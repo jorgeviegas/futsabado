@@ -243,9 +243,8 @@ select { background-image: linear-gradient(45deg, transparent 50%, var(--texto-2
 .passos { margin: 0; padding-left: 1.2rem; display: grid; gap: .4rem; }
 
 /* Patrocinadores */
-.patrocinadores { margin-top: 20px; display: grid; gap: 8px; }
-.patro-grade { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
-.patro { background: #000; border: 1px solid var(--borda); border-radius: 12px; height: 84px; padding: 12px; display: flex; align-items: center; justify-content: center; }
-.patro.claro { background: #fff; }
+.patrocinadores { margin-top: 24px; display: grid; gap: 8px; }
+.patro-grade { display: grid; grid-template-columns: repeat(2, 1fr); gap: 22px 18px; align-items: center; padding: 10px 4px 4px; }
+.patro { height: 56px; display: flex; align-items: center; justify-content: center; }
 .patro img { max-width: 100%; max-height: 100%; object-fit: contain; }
 .patro-grade .patro:last-child:nth-child(odd) { grid-column: 1 / -1; }

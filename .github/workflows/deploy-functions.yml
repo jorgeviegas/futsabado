@@ -42,5 +42,5 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         # --no-verify-jwt: a função é chamada pelo cron e protegida pelo segredo x-cron-secret
-        # --yes: no GitHub Actions não há terminal para confirmar o deploy; --remote substitui o antigo --project-ref
-        run: supabase functions deploy enviar-push --remote "${{ secrets.SUPABASE_PROJECT_REF }}" --no-verify-jwt --use-api --yes
+        # --yes: no GitHub Actions não há terminal para confirmar o deploy; --remote=<código> (com o sinal de =) substitui o antigo --project-ref
+        run: supabase functions deploy enviar-push --remote="${{ secrets.SUPABASE_PROJECT_REF }}" --no-verify-jwt --use-api --yes

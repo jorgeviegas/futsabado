@@ -207,3 +207,12 @@ export interface ConfigTime {
   pix_tipo: TipoPix | null
   pix_beneficiario: string | null
 }
+
+/** Quais avisos push o jogador quer receber. */
+export interface PushPreferencias {
+  jogador_id: string
+  confirmacao_aberta: boolean
+  vaga_lista_espera: boolean
+  lembrete_vespera: boolean
+  resultado_craque: boolean
+}

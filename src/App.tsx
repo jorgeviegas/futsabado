@@ -13,6 +13,7 @@ import Peladas from './pages/Peladas'
 import Financeiro from './pages/Financeiro'
 import Rankings from './pages/Rankings'
 import Onboarding from './pages/Onboarding'
+import Notificacoes from './pages/Notificacoes'
 
 const queryClient = new QueryClient({
   // Dados são considerados frescos por 5 min: trocar de aba rapidamente não gera chamadas.
@@ -37,6 +38,7 @@ function Rotas() {
         <Route path="jogadores" element={<Jogadores />} />
         <Route path="rankings" element={<Rankings />} />
         <Route path="posicoes" element={<Onboarding embutido />} />
+        <Route path="notificacoes" element={<Notificacoes />} />
         <Route path="financeiro" element={<Financeiro />} />
         <Route path="peladas" element={isAdmin ? <Peladas /> : <Navigate to="/" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />

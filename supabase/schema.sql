@@ -224,6 +224,45 @@ create table if not exists public.config_time (
 );
 insert into public.config_time (id) values (1) on conflict (id) do nothing;
 
+-- v12: notificações push (Web Push)
+-- Dispositivos inscritos (um jogador pode ter vários aparelhos).
+create table if not exists public.push_assinaturas (
+  id          uuid primary key default gen_random_uuid(),
+  jogador_id  uuid not null references public.jogadores(id) on delete cascade,
+  endpoint    text not null unique,
+  p256dh      text not null,
+  auth        text not null,
+  user_agent  text,
+  criado_em   timestamptz not null default now()
+);
+create index if not exists push_assinaturas_jogador_idx on public.push_assinaturas (jogador_id);
+
+-- Quais avisos cada jogador quer receber (sem linha = todos ligados).
+create table if not exists public.push_preferencias (
+  jogador_id          uuid primary key references public.jogadores(id) on delete cascade,
+  confirmacao_aberta  boolean not null default true,
+  vaga_lista_espera   boolean not null default true,
+  lembrete_vespera    boolean not null default true,
+  resultado_craque    boolean not null default true
+);
+
+-- Fila de envio: o banco enfileira, a Edge Function "enviar-push" envia. Sem acesso pelo app (só service_role).
+create table if not exists public.push_fila (
+  id          uuid primary key default gen_random_uuid(),
+  jogador_id  uuid not null references public.jogadores(id) on delete cascade,
+  tipo        text not null,
+  titulo      text not null,
+  corpo       text not null,
+  url         text,
+  chave       text not null,
+  criado_em   timestamptz not null default now(),
+  enviado_em  timestamptz,
+  tentativas  int not null default 0,
+  erro        text,
+  unique (jogador_id, chave)
+);
+create index if not exists push_fila_pendentes_idx on public.push_fila (criado_em) where enviado_em is null;
+
 -- Caixa do time: entradas e saídas avulsas (as mensalidades/jogos pagos entram automaticamente no extrato).
 create table if not exists public.caixa_lancamentos (
   id          uuid primary key default gen_random_uuid(),
@@ -407,6 +446,8 @@ declare
   v_limite int;
   v_prox uuid;
   v_n int := 0;
+  v_info record;
+  v_dias text[] := array['dom','seg','ter','qua','qui','sex','sáb'];
 begin
   select p.limite_jogadores into v_limite
     from public.jogos j join public.peladas p on p.id = j.pelada_id
@@ -424,6 +465,16 @@ begin
     exit when v_prox is null;
     update public.presencas set status = 'confirmado' where jogo_id = p_jogo_id and jogador_id = v_prox;
     v_n := v_n + 1;
+
+    -- push: "você entrou no jogo" (vale para qualquer vaga liberada: cancelamento, convidado removido, limite maior...)
+    select g.data, g.horario, pe.nome into v_info
+      from public.jogos g join public.peladas pe on pe.id = g.pelada_id where g.id = p_jogo_id;
+    perform public.push_enfileirar(
+      v_prox, 'vaga_lista_espera', '✅ Você entrou no jogo!',
+      format('Abriu uma vaga e você saiu da lista de espera: %s · %s, %s às %s.',
+             v_info.nome, v_dias[extract(dow from v_info.data)::int + 1], to_char(v_info.data, 'DD/MM'), to_char(v_info.horario, 'HH24:MI')),
+      '/jogo/' || p_jogo_id,
+      'vaga:' || p_jogo_id || ':' || v_prox || ':' || extract(epoch from clock_timestamp())::bigint);
     v_prox := null;
   end loop;
   return v_n;
@@ -563,6 +614,9 @@ alter table public.pagamentos enable row level security;
 alter table public.convidados enable row level security;
 alter table public.avisos_avulsos enable row level security;
 alter table public.config_time enable row level security;
+alter table public.push_assinaturas enable row level security;
+alter table public.push_preferencias enable row level security;
+alter table public.push_fila enable row level security;  -- sem políticas: só o service_role (Edge Function) acessa
 alter table public.caixa_lancamentos enable row level security;
 
 -- jogadores
@@ -698,6 +752,14 @@ create policy config_select on public.config_time for select to authenticated
 drop policy if exists config_admin on public.config_time;
 create policy config_admin on public.config_time for all to authenticated
   using (public.is_admin()) with check (public.is_admin());
+
+-- push: cada jogador gerencia só os próprios dispositivos e preferências
+drop policy if exists push_assinaturas_own on public.push_assinaturas;
+create policy push_assinaturas_own on public.push_assinaturas for all to authenticated
+  using (jogador_id = public.meu_jogador_id()) with check (jogador_id = public.meu_jogador_id());
+drop policy if exists push_preferencias_own on public.push_preferencias;
+create policy push_preferencias_own on public.push_preferencias for all to authenticated
+  using (jogador_id = public.meu_jogador_id()) with check (jogador_id = public.meu_jogador_id());
 
 -- ---------------------------------------------------------------------
 -- FUNÇÕES RPC (chamadas pelo app)
@@ -1208,6 +1270,181 @@ begin
 end;
 $$;
 
+-- ---------------------------------------------------------------------
+-- NOTIFICAÇÕES PUSH
+-- ---------------------------------------------------------------------
+
+-- (interna) coloca uma notificação na fila, respeitando as preferências do jogador.
+-- Não enfileira quem não tem nenhum aparelho inscrito. `chave` evita duplicar o mesmo aviso. Devolve 1 se enfileirou.
+create or replace function public.push_enfileirar(
+  p_jogador uuid, p_tipo text, p_titulo text, p_corpo text, p_url text, p_chave text
+)
+returns int language plpgsql security definer set search_path = public as $$
+declare
+  v_linhas int;
+  v_quer boolean;
+begin
+  if p_tipo <> 'teste' then
+    if not exists (select 1 from public.push_assinaturas a where a.jogador_id = p_jogador) then
+      return 0;
+    end if;
+    select case p_tipo
+             when 'confirmacao_aberta' then pr.confirmacao_aberta
+             when 'vaga_lista_espera'  then pr.vaga_lista_espera
+             when 'lembrete_vespera'   then pr.lembrete_vespera
+             when 'resultado_craque'   then pr.resultado_craque
+             else true end
+      into v_quer
+      from public.push_preferencias pr where pr.jogador_id = p_jogador;
+    if coalesce(v_quer, true) is false then
+      return 0;
+    end if;
+  end if;
+
+  insert into public.push_fila (jogador_id, tipo, titulo, corpo, url, chave)
+  values (p_jogador, p_tipo, p_titulo, p_corpo, p_url, p_chave)
+  on conflict (jogador_id, chave) do nothing;
+  get diagnostics v_linhas = row_count;
+  return v_linhas;
+end;
+$$;
+
+-- Avisos por horário (chamada a cada minuto pela Edge Function "enviar-push"):
+--  * confirmação aberta: a partir das 09:00 do dia em que abre, para quem ainda não respondeu;
+--  * lembrete de véspera: 12 h antes do jogo, para quem está confirmado.
+-- `p_agora` (horário de Brasília) existe só para testes. Devolve quantas notificações foram enfileiradas.
+create or replace function public.push_gerar_agendados(p_agora timestamp default null)
+returns int language plpgsql security definer set search_path = public as $$
+declare
+  v_agora timestamp := coalesce(p_agora, now() at time zone 'America/Sao_Paulo');
+  v_hoje date := v_agora::date;
+  v_dias text[] := array['dom','seg','ter','qua','qui','sex','sáb'];
+  v_n int := 0;
+  v_quando text;
+  g record;
+  j record;
+begin
+  -- 1) confirmação de presença aberta
+  if v_agora::time >= time '09:00' then
+    for g in
+      select ge.id, ge.data, ge.horario, ge.created_at, pe.nome, public.liberacao_confirmacao(ge.id) as lib
+        from public.jogos ge join public.peladas pe on pe.id = ge.pelada_id
+       where ge.status = 'agendado' and (ge.data + ge.horario) > v_agora
+    loop
+      -- só avisa quando acabou de abrir (hoje ou ontem); sem jogo anterior, vale desde a criação do jogo
+      continue when not (
+        (g.lib is not null and g.lib <= v_hoje and g.lib >= v_hoje - 1)
+        or (g.lib is null and (g.created_at at time zone 'America/Sao_Paulo')::date >= v_hoje - 1)
+      );
+      for j in
+        select jo.id from public.jogadores jo
+         where jo.ativo and not exists (select 1 from public.presencas pr where pr.jogo_id = g.id and pr.jogador_id = jo.id)
+      loop
+        v_n := v_n + public.push_enfileirar(
+          j.id, 'confirmacao_aberta', '⚽ Confirmação de presença aberta',
+          format('%s · %s, %s às %s. Toque para responder.', g.nome, v_dias[extract(dow from g.data)::int + 1], to_char(g.data, 'DD/MM'), to_char(g.horario, 'HH24:MI')),
+          '/jogo/' || g.id, 'conf:' || g.id);
+      end loop;
+    end loop;
+  end if;
+
+  -- 2) lembrete de véspera: de 12 h antes até o início do jogo
+  for g in
+    select ge.id, ge.data, ge.horario, ge.local, pe.nome
+      from public.jogos ge join public.peladas pe on pe.id = ge.pelada_id
+     where ge.status = 'agendado'
+       and (ge.data + ge.horario) > v_agora
+       and (ge.data + ge.horario) - interval '12 hours' <= v_agora
+  loop
+    v_quando := case when g.data = v_hoje then 'Hoje'
+                     when g.data = v_hoje + 1 then 'Amanhã'
+                     else v_dias[extract(dow from g.data)::int + 1] || ' ' || to_char(g.data, 'DD/MM') end;
+    for j in select pr.jogador_id as id from public.presencas pr where pr.jogo_id = g.id and pr.status = 'confirmado' loop
+      v_n := v_n + public.push_enfileirar(
+        j.id, 'lembrete_vespera', format('⏰ %s tem jogo às %s', v_quando, to_char(g.horario, 'HH24:MI')),
+        g.nome || coalesce(' · ' || g.local, '') || '. Você está confirmado — até lá!',
+        '/jogo/' || g.id, 'vesp:' || g.id);
+    end loop;
+  end loop;
+
+  -- limpeza: notificações enviadas há mais de 30 dias
+  delete from public.push_fila where enviado_em is not null and enviado_em < now() - interval '30 days';
+  return v_n;
+end;
+$$;
+
+-- Votação encerrada com resultado pronto: avisa quem jogou quem foi o craque (só se houve voto).
+create or replace function public.push_craque()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  v_dias text[] := array['dom','seg','ter','qua','qui','sex','sáb'];
+  v_nomes text;
+  v_votos bigint;
+  v_n int;
+  v_quando text;
+  v_corpo text;
+  p record;
+begin
+  if not (old.votacao_aberta is true and new.votacao_aberta is false and new.status = 'realizado') then
+    return null;
+  end if;
+
+  select string_agg(coalesce(nullif(j.apelido, ''), j.nome), ' e ' order by j.nome), max(c.n), count(*)
+    into v_nomes, v_votos, v_n
+    from (select v.votado_id, count(*) as n from public.votos v where v.jogo_id = new.id group by v.votado_id) c
+    join (select max(z.n) as mx from (select count(*) as n from public.votos v where v.jogo_id = new.id group by v.votado_id) z) m on c.n = m.mx
+    join public.jogadores j on j.id = c.votado_id;
+  if v_nomes is null then
+    return null;   -- ninguém votou: não há resultado para avisar
+  end if;
+
+  v_quando := v_dias[extract(dow from new.data)::int + 1] || ', ' || to_char(new.data, 'DD/MM');
+  v_corpo := case when v_n > 1
+    then format('%s empataram como craques do jogo de %s (%s %s cada).', v_nomes, v_quando, v_votos, case when v_votos = 1 then 'voto' else 'votos' end)
+    else format('%s foi eleito craque do jogo de %s (%s %s).', v_nomes, v_quando, v_votos, case when v_votos = 1 then 'voto' else 'votos' end) end;
+
+  for p in select pr.jogador_id from public.presencas pr where pr.jogo_id = new.id and pr.status = 'confirmado' loop
+    perform public.push_enfileirar(p.jogador_id, 'resultado_craque', '🏆 Craque do jogo', v_corpo, '/jogo/' || new.id, 'craque:' || new.id);
+  end loop;
+  return null;
+end;
+$$;
+
+drop trigger if exists jogos_push_craque on public.jogos;
+create trigger jogos_push_craque
+  after update of votacao_aberta on public.jogos
+  for each row when (old.votacao_aberta is true and new.votacao_aberta is false)
+  execute function public.push_craque();
+
+-- App: registra (ou move para o jogador logado) o aparelho que aceitou as notificações.
+create or replace function public.push_registrar(p_endpoint text, p_p256dh text, p_auth text, p_user_agent text default null)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  v_jogador uuid := public.meu_jogador_id();
+begin
+  if v_jogador is null then
+    raise exception 'Acesso negado';
+  end if;
+  insert into public.push_assinaturas (jogador_id, endpoint, p256dh, auth, user_agent)
+  values (v_jogador, p_endpoint, p_p256dh, p_auth, left(p_user_agent, 300))
+  on conflict (endpoint) do update
+    set jogador_id = excluded.jogador_id, p256dh = excluded.p256dh, auth = excluded.auth, user_agent = excluded.user_agent;
+end;
+$$;
+
+-- App: envia uma notificação de teste para o próprio jogador (chega em até 1 minuto).
+create or replace function public.push_teste()
+returns int language plpgsql security definer set search_path = public as $$
+declare
+  v_jogador uuid := public.meu_jogador_id();
+begin
+  if v_jogador is null then
+    raise exception 'Acesso negado';
+  end if;
+  return public.push_enfileirar(v_jogador, 'teste', '🔔 Teste de notificação', 'Tudo certo! As notificações do FutSábado estão funcionando neste aparelho.', '/', 'teste:' || extract(epoch from clock_timestamp())::bigint);
+end;
+$$;
+
 -- Permissões de execução das funções
 revoke execute on function public.gerar_jogos(uuid, int) from public, anon;
 revoke execute on function public.resultado_votacao(uuid) from public, anon;
@@ -1217,6 +1454,11 @@ revoke execute on function public.ranking_vencedores(int) from public, anon;
 revoke execute on function public.jogos_no_ano(int) from public, anon;
 revoke execute on function public.marcar_pagamento(uuid, text, date, uuid, numeric, boolean, uuid) from public, anon;
 revoke execute on function public.processar_jogos() from public, anon;
+revoke execute on function public.push_enfileirar(uuid, text, text, text, text, text) from public, anon, authenticated;
+revoke execute on function public.push_gerar_agendados(timestamp) from public, anon, authenticated;
+revoke execute on function public.push_craque() from public, anon, authenticated;
+revoke execute on function public.push_registrar(text, text, text, text) from public, anon;
+revoke execute on function public.push_teste() from public, anon;
 revoke execute on function public.gerar_jogos_automaticos() from public, anon;
 revoke execute on function public._tirar_do_sorteio(uuid, text) from public, anon, authenticated;
 revoke execute on function public.promover_espera(uuid) from public, anon, authenticated;
@@ -1239,6 +1481,8 @@ grant execute on function public.ranking_vencedores(int) to authenticated;
 grant execute on function public.jogos_no_ano(int) to authenticated;
 grant execute on function public.marcar_pagamento(uuid, text, date, uuid, numeric, boolean, uuid) to authenticated;
 grant execute on function public.processar_jogos() to authenticated;
+grant execute on function public.push_registrar(text, text, text, text) to authenticated;
+grant execute on function public.push_teste() to authenticated;
 grant execute on function public.gerar_jogos_automaticos() to authenticated;
 grant execute on function public.remover_faltoso(uuid, uuid) to authenticated;
 grant execute on function public.encerrar_jogo(uuid, uuid[], uuid[], int, int) to authenticated;

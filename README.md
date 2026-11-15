@@ -122,6 +122,29 @@ Abra a URL no celular → Chrome: **Instalar app / Adicionar à tela inicial** �
   avisos de todos enquanto estiverem válidos.
 - **Pix do time:** em *Financeiro → Caixa*, todos veem e copiam a chave Pix com um toque; o admin cadastra/edita.
 
+## Notificações push (Android e iPhone)
+
+Avisos automáticos no celular, sem depender do WhatsApp: **confirmação de presença aberta**, **você entrou no jogo** (saiu da
+lista de espera), **lembrete de véspera** (12 h antes do jogo, para confirmados) e **craque do jogo** (só quando a votação
+encerra e o resultado está pronto). Cada jogador escolhe o que quer receber em 🔔 (cabeçalho do app).
+
+**Como funciona:** o banco enfileira os avisos (`push_fila`); a Edge Function `enviar-push`, chamada a cada minuto pelo
+pg_cron, gera os avisos por horário e envia tudo via Web Push. Custo: R$ 0 (Supabase gratuito).
+
+**Configuração (uma vez):**
+1. Gere as chaves: `node scripts/gerar-vapid.mjs` (ou `npx web-push generate-vapid-keys`). A **pública** vai no site; a **privada**, só no Supabase.
+2. GitHub → Settings → Secrets → Actions: crie `VITE_VAPID_PUBLIC_KEY` (chave pública), `SUPABASE_ACCESS_TOKEN`
+   ([token da conta](https://supabase.com/dashboard/account/tokens)) e `SUPABASE_PROJECT_REF` (o código do projeto, na URL do Supabase).
+3. Supabase → Edge Functions → **Secrets**: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (`mailto:um-email-do-time@…`
+   ou uma URL `https://…`) e `PUSH_CRON_SECRET` (uma senha qualquer, longa).
+4. Rode o `supabase/schema.sql` de novo e depois publique a função: GitHub → Actions → *Deploy da Edge Function (push)* → Run workflow
+   (ou, com a CLI: `supabase functions deploy enviar-push --no-verify-jwt`).
+5. Supabase → Database → Extensions: ative **pg_cron** e **pg_net**; edite e rode `supabase/push_cron.sql` (troque `<PROJECT_REF>` e `<SEGREDO>`).
+6. Rode o deploy do site de novo (Actions → *Deploy no GitHub Pages* → Run workflow) para a chave pública entrar no app.
+
+**Cada jogador:** no **iPhone**, instale o app (Safari → Compartilhar → *Adicionar à Tela de Início*) e abra pelo ícone — fora do app
+instalado o iPhone não recebe push (iOS 16.4+). Depois toque em 🔔 → *Ativar notificações* → *Enviar teste*.
+
 ## Fluxo de uso
 
 1. **Peladas** (admin): crie “Pelada de Sábado” (dia, horário, local, limite, valores) e toque em *Gerar próximas 4 semanas*.

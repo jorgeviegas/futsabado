@@ -49,6 +49,7 @@ begin
     public.convidados,
     public.caixa_lancamentos,
     public.avisos_avulsos,
+    public.push_fila,
     public.presencas,
     public.pagamentos,
     public.jogos,

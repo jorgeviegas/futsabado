@@ -4,7 +4,7 @@ import { supabase } from './supabase'
 import { hojeISO, somaDias } from './format'
 import { gerarCobrancas, type ConvidadoJogou, type Jogou } from './financeiro'
 import type {
-  AvisoAvulso, ConfigTime, Convidado, ExtratoItem, FuncaoGoleiro, Jogador, Jogo, Lancamento, Pagamento, Pelada, Presenca, RankingAssiduo,
+  AvisoAvulso, ConfigTime, PushPreferencias, Convidado, ExtratoItem, FuncaoGoleiro, Jogador, Jogo, Lancamento, Pagamento, Pelada, Presenca, RankingAssiduo,
   RankingCraque, RankingGoleiro, RankingVencedor, ResultadoVotacao, ResumoCaixa, StatusPresenca, TipoPagamento, Voto,
 } from './types'
 
@@ -534,4 +534,23 @@ export const useSalvarConfigTime = () =>
     async (c: Pick<ConfigTime, 'pix_chave' | 'pix_tipo' | 'pix_beneficiario'>) =>
       ok(await supabase.from('config_time').upsert({ id: 1, ...c })),
     [['configTime']],
+  )
+
+// ---------- Notificações push: preferências ----------
+export const PUSH_PADRAO = { confirmacao_aberta: true, vaga_lista_espera: true, lembrete_vespera: true, resultado_craque: true }
+
+export const usePushPreferencias = (jogadorId: string | undefined) =>
+  useQuery({
+    queryKey: ['pushPreferencias', jogadorId],
+    enabled: Boolean(jogadorId),
+    queryFn: async () => {
+      const r = ok(await supabase.from('push_preferencias').select('*').eq('jogador_id', jogadorId!).maybeSingle()) as PushPreferencias | null
+      return { ...PUSH_PADRAO, ...(r ?? {}) } as typeof PUSH_PADRAO
+    },
+  })
+
+export const useSalvarPushPreferencias = (jogadorId: string | undefined) =>
+  useAcao(
+    async (p: Partial<typeof PUSH_PADRAO>) => ok(await supabase.from('push_preferencias').upsert({ jogador_id: jogadorId, ...p })),
+    [['pushPreferencias']],
   )

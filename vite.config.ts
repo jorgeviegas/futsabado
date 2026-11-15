@@ -10,6 +10,10 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
+      // service worker próprio (src/sw.ts): guarda o app e trata as notificações push
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
       registerType: 'autoUpdate',
       includeAssets: ['favicon.png', 'logo.png', 'apple-touch-icon.png'],
       manifest: {
@@ -29,11 +33,9 @@ export default defineConfig({
           { src: 'pwa-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
-      workbox: {
+      injectManifest: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
-        navigateFallback: 'index.html',
-        // Nunca cacheia chamadas ao Supabase: dados sempre frescos.
-        navigateFallbackDenylist: [/^\/rest\//, /^\/auth\//],
+        rollupFormat: 'iife', // service worker clássico (compatível com navegadores mais antigos)
       },
     }),
   ],

@@ -6,6 +6,7 @@ import {
 import { useAuth } from '../lib/auth'
 import { confirmacaoLiberada, formatarData, hojeISO, moeda } from '../lib/format'
 import { totalDe } from '../lib/financeiro'
+import { usePushEstado } from '../lib/push'
 
 interface Aviso {
   chave: string
@@ -37,6 +38,7 @@ export default function Avisos() {
   const { cobrancas: minhasCobrancas } = useCobrancas(eu?.id)
 
   const { data: avulsos = [] } = useAvisosAvulsos()
+  const { estado: estadoPush } = usePushEstado()
 
   const avisos: Aviso[] = []
 
@@ -51,6 +53,16 @@ export default function Avisos() {
         linhas: a.mensagem ? [a.mensagem] : undefined,
       }),
     )
+
+  // -0) Convite para ativar as notificações (só quando dá para ativar ou falta instalar o app)
+  if (estadoPush === 'desativado' || estadoPush === 'instalar') {
+    avisos.push({
+      chave: 'push', icone: '🔔',
+      titulo: estadoPush === 'instalar' ? 'Instale o app para receber notificações' : 'Ative as notificações',
+      detalhe: 'Confirmação de presença, lista de espera, lembrete de véspera e craque do jogo.',
+      to: '/notificacoes',
+    })
+  }
 
   // 0) Pendência financeira do jogador logado (sempre em primeiro lugar)
   if (eu) {

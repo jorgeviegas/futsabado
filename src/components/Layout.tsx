@@ -17,6 +17,16 @@ export default function Layout() {
       if (realizados > 0 || criados > 0) qc.invalidateQueries({ queryKey: ['jogos'] })
     })
   }, [qc])
+
+  // Toque numa notificação com o app já aberto: o service worker pede para ir à tela do aviso.
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return
+    const ouvir = (e: MessageEvent) => {
+      if (e.data?.tipo === 'navegar' && typeof e.data.hash === 'string') location.hash = e.data.hash
+    }
+    navigator.serviceWorker.addEventListener('message', ouvir)
+    return () => navigator.serviceWorker.removeEventListener('message', ouvir)
+  }, [])
   return (
     <div className="app">
       <header className="topo">
@@ -26,6 +36,7 @@ export default function Layout() {
           {eu?.apelido || eu?.nome}
           {isAdmin && ' · admin'}
         </span>
+        <NavLink to="/notificacoes" className="sino" aria-label="Notificações" title="Notificações">🔔</NavLink>
         <button className="btn sec peq" onClick={sair}>Sair</button>
       </header>
       <main className="conteudo">

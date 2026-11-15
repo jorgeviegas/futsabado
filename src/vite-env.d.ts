@@ -3,4 +3,6 @@
 interface ImportMetaEnv {
   readonly VITE_SUPABASE_URL: string
   readonly VITE_SUPABASE_ANON_KEY: string
+  /** Chave pública VAPID (notificações push). */
+  readonly VITE_VAPID_PUBLIC_KEY?: string
 }

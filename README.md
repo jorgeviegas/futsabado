@@ -56,8 +56,11 @@ Abra a URL no celular → Chrome: **Instalar app / Adicionar à tela inicial** �
 - **Sorteio** (admin, na tela do jogo): divide os confirmados em *Time Preto* (camisa com listra vertical grená) e *Time Branco* (off-white com listrado fino grená) equilibrando as posições
   e monta a escalação 2-3-1 num diagrama tático. Cada vaga usa a posição primária, depois a secundária; quem sobrar
   joga fora de posição (marcado em amarelo).
-- Com **mais de 14 confirmados**, entra primeiro quem tem **mais jogos no ano** (desempate aleatório). Para inverter
-  (rodízio, quem jogou menos entra primeiro), troque `PRIORIDADE_PARA_QUEM_MAIS_JOGOU` em `src/lib/sorteio.ts`.
+- Com **mais de 14 confirmados**, os titulares são escolhidos **pela posição**: cada vaga da formação (2 goleiros, 4 zagueiros,
+  4 alas, 2 meias, 2 atacantes) vai primeiro para quem joga naquela posição, depois para quem a tem como secundária, e só
+  então para quem sobrar. O **número de jogos no ano é só desempate** entre jogadores da mesma posição disputando a mesma
+  vaga (entra quem tem mais jogos; depois, sorteio). Para inverter (rodízio), troque `PRIORIDADE_PARA_QUEM_MAIS_JOGOU`
+  em `src/lib/sorteio.ts`.
 - **Rankings** (aba própria): top 5 de craques e top 5 de maiores vencedores. Vitórias contam em jogos sorteados em que
   o admin informou o *time vencedor* (Editar jogo).
 

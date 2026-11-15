@@ -181,10 +181,11 @@ export default function JogoDetalhe() {
         titulo={`Confirmados (${participantes.length}${limite ? `/${limite}` : ''})`}
         lista={participantes}
         convidadoDe={donoDoConvidado}
+        posicoes
         funcoes={Object.fromEntries(pres.filter((p) => p.funcao).map((p) => [p.jogador_id, p.funcao!]))}
       />
       {esperando.length > 0 && (
-        <Lista titulo={`⏳ Lista de espera (${esperando.length})`} lista={esperando} ordem funcoes={Object.fromEntries(pres.filter((p) => p.funcao).map((p) => [p.jogador_id, p.funcao!]))} />
+        <Lista titulo={`⏳ Lista de espera (${esperando.length})`} lista={esperando} ordem posicoes funcoes={Object.fromEntries(pres.filter((p) => p.funcao).map((p) => [p.jogador_id, p.funcao!]))} />
       )}
       {ausentes.length > 0 && <Lista titulo={`Não vão (${ausentes.length})`} lista={ausentes} />}
 
@@ -248,8 +249,18 @@ export default function JogoDetalhe() {
   )
 }
 
-function Lista({ titulo, lista, funcoes = {}, convidadoDe = {}, ordem = false }: {
-  titulo: string; lista: Jogador[]; funcoes?: Record<string, FuncaoGoleiro>; convidadoDe?: Record<string, string>; ordem?: boolean
+/** Posição do jogador neste jogo: a primária (ou, se o goleiro vai jogar na linha, a secundária) e a secundária. */
+function textoPosicao(j: Jogador, funcao?: FuncaoGoleiro): string {
+  const naLinha = j.posicao === 'goleiro' && funcao === 'linha' && j.posicao_secundaria
+  const principal = naLinha ? j.posicao_secundaria : j.posicao
+  const secundaria = naLinha ? null : j.posicao_secundaria
+  if (!principal) return 'Posição livre'
+  return POSICOES[principal] + (secundaria ? ` · ${POSICOES[secundaria]}` : '')
+}
+
+function Lista({ titulo, lista, funcoes = {}, convidadoDe = {}, ordem = false, posicoes = false }: {
+  titulo: string; lista: Jogador[]; funcoes?: Record<string, FuncaoGoleiro>; convidadoDe?: Record<string, string>
+  ordem?: boolean; posicoes?: boolean
 }) {
   return (
     <div className="card">
@@ -262,6 +273,7 @@ function Lista({ titulo, lista, funcoes = {}, convidadoDe = {}, ordem = false }:
           <span className="grow">
             {exibir(j)}
             {j.posicao === 'goleiro' && funcoes[j.id] !== 'linha' && <span role="img" aria-label="Goleiro" title="Goleiro"> 🧤</span>}
+            {posicoes && <span className="muted" style={{ display: 'block' }}>{textoPosicao(j, funcoes[j.id])}</span>}
           </span>
           {convidadoDe[j.id] && <span className="chip aviso">convidado de {convidadoDe[j.id]}</span>}
           {funcoes[j.id] === 'linha' && <span className="chip aviso">joga na linha</span>}

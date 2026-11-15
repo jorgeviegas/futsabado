@@ -17,9 +17,13 @@ export const POSICAO_DO_SLOT: Record<Slot, Posicao> = {
 const ORDEM_PREENCHIMENTO: Slot[] = ['GOL', 'ATA', 'MEI', 'ZAG1', 'ZAG2', 'ALA1', 'ALA2']
 
 /**
- * Critério de desempate de quem JOGA PRIMEIRO quando há mais confirmados que vagas (14):
+ * Escolha dos titulares quando há mais confirmados que vagas (14): a PRIORIDADE É A POSIÇÃO.
+ * Cada vaga da formação (2 goleiros, 4 zagueiros, 4 alas, 2 meias, 2 atacantes) vai primeiro para quem joga
+ * naquela posição; depois, para quem a tem como secundária; só então para quem sobrar.
+ *
+ * O número de jogos no ano entra APENAS como DESEMPATE entre jogadores da mesma posição disputando a mesma vaga:
  * entra primeiro quem tem MAIS jogos no ano (premia a frequência). Para dar prioridade
- * a quem jogou MENOS (rodízio), troque para `false`.
+ * a quem jogou MENOS (rodízio), troque para `false`. Persistindo o empate, sorteia.
  */
 export const PRIORIDADE_PARA_QUEM_MAIS_JOGOU = true
 
@@ -30,6 +34,8 @@ export interface Candidato {
   jogosAno: number
   /** Só vale para goleiro com posição secundária: 'linha' = hoje joga na linha. */
   funcao?: 'gol' | 'linha' | null
+  /** (interno) tipo de vaga em que foi escolhido como titular. */
+  vaga?: Posicao
 }
 
 /** Goleiro que avisou que vai jogar na linha passa a ter a posição secundária como principal. */
@@ -51,25 +57,42 @@ function embaralhar<T>(lista: T[], rnd: () => number): T[] {
 
 const ORDEM_GRUPO: (Posicao | null)[] = ['goleiro', 'atacante', 'meia', 'zagueiro', 'ala']
 const grupo = (c: Candidato) => {
-  const i = ORDEM_GRUPO.indexOf(c.posicao)
+  const i = ORDEM_GRUPO.indexOf(c.vaga ?? c.posicao)
   return i < 0 ? 99 : i
 }
 
-/** Escolhe os 14 que começam jogando; os demais viram reservas (já em ordem de prioridade). */
+/** Vagas de um time na ordem em que são preenchidas (as mais escassas primeiro). */
+const VAGAS_DO_TIME: Posicao[] = ['goleiro', 'atacante', 'meia', 'zagueiro', 'zagueiro', 'ala', 'ala']
+
+/**
+ * Escolhe os 14 que começam jogando; os demais viram reservas (na ordem de prioridade).
+ * Preenche as 14 vagas da formação em três rodadas: posição primária, depois secundária, depois quem sobrar.
+ * Em cada vaga, entre quem tem a posição certa, o desempate é o nº de jogos no ano.
+ */
 function separarTitulares(candidatos: Candidato[], rnd: () => number) {
   if (candidatos.length <= TAMANHO_TIME * 2) return { titulares: [...candidatos], reservas: [] as Candidato[] }
 
   const sinal = PRIORIDADE_PARA_QUEM_MAIS_JOGOU ? -1 : 1
   // embaralha antes: o sort é estável, então empates no nº de jogos são decididos no sorteio
-  const ordenados = embaralhar(candidatos, rnd).sort((a, b) => sinal * (a.jogosAno - b.jogosAno))
+  const livres = embaralhar(candidatos, rnd).sort((a, b) => sinal * (a.jogosAno - b.jogosAno))
+  const reservasEmOrdem = [...livres]
 
-  // garante até 2 goleiros entre os titulares (1 por time), se houver
-  const goleiros = ordenados.filter((c) => c.posicao === 'goleiro').slice(0, 2)
-  const ids = new Set(goleiros.map((g) => g.id))
-  const resto = ordenados.filter((c) => !ids.has(c.id))
-  const titulares = [...goleiros, ...resto.slice(0, TAMANHO_TIME * 2 - goleiros.length)]
+  const vagas: Posicao[] = [...VAGAS_DO_TIME, ...VAGAS_DO_TIME]
+  const preenchidas: (Candidato | null)[] = vagas.map(() => null)
+
+  for (const nivel of ['primaria', 'secundaria', 'qualquer'] as const) {
+    vagas.forEach((tipo, v) => {
+      if (preenchidas[v]) return
+      const i = livres.findIndex((c) =>
+        nivel === 'primaria' ? c.posicao === tipo : nivel === 'secundaria' ? c.posicao_secundaria === tipo : true,
+      )
+      if (i >= 0) preenchidas[v] = { ...livres.splice(i, 1)[0], vaga: tipo }
+    })
+  }
+
+  const titulares = preenchidas.filter((c): c is Candidato => c !== null)
   const tit = new Set(titulares.map((c) => c.id))
-  return { titulares, reservas: ordenados.filter((c) => !tit.has(c.id)) }
+  return { titulares, reservas: reservasEmOrdem.filter((c) => !tit.has(c.id)) }
 }
 
 /** Distribui as posições do time nas vagas da formação: primária → secundária → quem sobrar. */

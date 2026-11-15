@@ -25,10 +25,10 @@ function Jogador_({ e, j, cor, baixo }: { e: Escalado; j?: Jogador; cor: 'branco
   const rotulo = j?.numero_camisa != null ? String(j.numero_camisa) : nome.trim().slice(0, 2).toUpperCase()
   return (
     <g>
-      <circle cx={x} cy={y} r="6.2" fill={`url(#uniforme-${cor})`} stroke={e.fora ? '#e0a526' : cor === 'preto' ? '#000' : '#fff'} strokeWidth="0.9" strokeDasharray={e.fora ? '1.6 1' : undefined} />
+      <circle cx={x} cy={y} r="6.2" fill={e.slot === 'GOL' ? 'url(#uniforme-goleiro)' : `url(#uniforme-${cor})`} stroke={e.fora ? '#e0a526' : cor === 'preto' ? '#000' : '#fff'} strokeWidth="0.9" strokeDasharray={e.fora ? '1.6 1' : undefined} />
       <text
         x={x} y={y + 1.9} textAnchor="middle" fontSize="5.2" fontWeight="800"
-        fill={cor === 'preto' ? '#fff' : '#3a0a14'} stroke={cor === 'preto' ? '#000' : '#f4f0e6'} strokeWidth="0.7" paintOrder="stroke"
+        fill={e.slot === 'GOL' || cor === 'preto' ? '#fff' : '#3a0a14'} stroke={e.slot === 'GOL' ? '#06240f' : cor === 'preto' ? '#000' : '#f4f0e6'} strokeWidth="0.7" paintOrder="stroke"
       >
         {rotulo}
       </text>
@@ -48,6 +48,11 @@ export default function Escalacao({ sorteio, jogadores }: { sorteio: Sorteio; jo
         <pattern id="uniforme-preto" patternContentUnits="objectBoundingBox" width="1" height="1">
           <rect width="1" height="1" fill="#0d0d0d" />
           <rect x="0.37" width="0.26" height="1" fill="#9b1b36" />
+        </pattern>
+        {/* Goleiro: verde listrado */}
+        <pattern id="uniforme-goleiro" patternUnits="userSpaceOnUse" width="3.2" height="2">
+          <rect width="3.2" height="2" fill="#43b05f" />
+          <rect width="1.6" height="2" fill="#1d6f36" />
         </pattern>
         {/* Branco: off-white com listrado fino grená */}
         <pattern id="uniforme-branco" patternUnits="userSpaceOnUse" width="1.5" height="2">

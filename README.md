@@ -59,7 +59,8 @@ Abra a URL no celular → Chrome: **Instalar app / Adicionar à tela inicial** �
 - Com **mais de 14 confirmados**, os titulares são escolhidos **pela posição**: cada vaga da formação (2 goleiros, 4 zagueiros,
   4 alas, 2 meias, 2 atacantes) vai primeiro para quem joga naquela posição, depois para quem a tem como secundária, e só
   então para quem sobrar. O **número de jogos no ano é só desempate** entre jogadores da mesma posição disputando a mesma
-  vaga (entra quem tem mais jogos; depois, sorteio). Para inverter (rodízio), troque `PRIORIDADE_PARA_QUEM_MAIS_JOGOU`
+  vaga (entra quem tem mais jogos; depois, sorteio). **Todos os confirmados entram nos times**: quem passa de 14 fica no
+  *banco* de um dos times (bancos equilibrados). Goleiros usam camisa verde listrada e 🧤 nas listas. Para inverter (rodízio), troque `PRIORIDADE_PARA_QUEM_MAIS_JOGOU`
   em `src/lib/sorteio.ts`.
 - **Rankings** (aba própria): top 5 de craques e top 5 de maiores vencedores. Vitórias contam em jogos sorteados em que
   o admin informou o *time vencedor* (Editar jogo).

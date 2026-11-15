@@ -60,6 +60,7 @@ export default function JogoDetalhe() {
   const ausentes = jogadores.filter((j) => pres.some((p) => p.jogador_id === j.id && p.status === 'ausente'))
   const limite = jogo.peladas?.limite_jogadores
   const cheio = Boolean(limite && participantes.length >= limite)
+  const funcoes: Record<string, FuncaoGoleiro> = Object.fromEntries(pres.filter((p) => p.funcao).map((p) => [p.jogador_id, p.funcao!]))
   const naFila = minha === 'espera'
   const euConfirmado = minha === 'confirmado'
   // lista de espera, na ordem de chegada
@@ -173,23 +174,23 @@ export default function JogoDetalhe() {
         </div>
       )}
 
-      {(agendado || convidados.length > 0) && (
-        <Convidados jogo={jogo} convidados={convidados} jogadores={jogadores} podeConvidar={agendado && liberada && !cheio} cheio={agendado && cheio} />
-      )}
-
       <Lista
         titulo={`Confirmados (${participantes.length}${limite ? `/${limite}` : ''})`}
         lista={participantes}
         convidadoDe={donoDoConvidado}
         posicoes
-        funcoes={Object.fromEntries(pres.filter((p) => p.funcao).map((p) => [p.jogador_id, p.funcao!]))}
+        funcoes={funcoes}
       />
       {esperando.length > 0 && (
-        <Lista titulo={`⏳ Lista de espera (${esperando.length})`} lista={esperando} ordem posicoes funcoes={Object.fromEntries(pres.filter((p) => p.funcao).map((p) => [p.jogador_id, p.funcao!]))} />
+        <Lista titulo={`⏳ Lista de espera (${esperando.length})`} lista={esperando} ordem posicoes funcoes={funcoes} />
       )}
+      {(agendado || convidados.length > 0) && (
+        <Convidados jogo={jogo} convidados={convidados} jogadores={jogadores} podeConvidar={agendado && liberada && !cheio} cheio={agendado && cheio} />
+      )}
+
       {ausentes.length > 0 && <Lista titulo={`Não vão (${ausentes.length})`} lista={ausentes} />}
 
-      {jogo.sorteio && <Times jogo={jogo} jogadores={todos} jogosAno={jogosAno} />}
+      {jogo.sorteio && <Times jogo={jogo} jogadores={todos} jogosAno={jogosAno} funcoes={funcoes} />}
 
       {jogo.status === 'realizado' || jogo.votacao_aberta ? (
         <Votacao jogoId={jogo.id} aberta={jogo.votacao_aberta} confirmados={confirmados} />
@@ -434,58 +435,87 @@ function EditarJogo({ jogo, onFechar }: { jogo: NonNullable<ReturnType<typeof us
   )
 }
 
-function Times({ jogo, jogadores, jogosAno }: { jogo: NonNullable<ReturnType<typeof useJogo>['data']>; jogadores: Jogador[]; jogosAno: Record<string, number> }) {
+/** Goleiro "de hoje": de posição, a menos que tenha avisado que joga na linha. */
+const ehGoleiroDeHoje = (j: Jogador | undefined, funcao?: FuncaoGoleiro) => j?.posicao === 'goleiro' && funcao !== 'linha'
+
+function Times({ jogo, jogadores, jogosAno, funcoes }: {
+  jogo: NonNullable<ReturnType<typeof useJogo>['data']>
+  jogadores: Jogador[]
+  jogosAno: Record<string, number>
+  funcoes: Record<string, FuncaoGoleiro>
+}) {
   const sorteio = jogo.sorteio!
   const por = new Map(jogadores.map((j) => [j.id, j]))
   const venceu = jogo.time_vencedor
+  const semTime = sorteio.reservas ?? [] // sorteios antigos: reservas sem time
 
   return (
     <div className="card">
       <h2>🎲 Times sorteados</h2>
-      <Escalacao sorteio={sorteio} jogadores={jogadores} />
-      <p className="muted">Formação 2-3-1. Contorno tracejado = jogando fora da posição.</p>
-      <TimeLista cor="branco" lista={sorteio.branco} por={por} venceu={venceu} />
-      <TimeLista cor="preto" lista={sorteio.preto} por={por} venceu={venceu} />
-      {sorteio.reservas.length > 0 && (
-        <div style={{ display: 'grid', gap: '.4rem' }}>
-          <h3>Reservas ({sorteio.reservas.length})</h3>
-          <p className="muted">Mais de 14 confirmados: entra primeiro quem tem mais jogos no ano.</p>
-          {sorteio.reservas.map((id) => {
-            const j = por.get(id)
-            return (
-              <div className="linha" key={id}>
-                <Avatar nome={j ? exibir(j) : '?'} numero={j?.numero_camisa} />
-                <span className="grow">{j ? exibir(j) : '—'}</span>
-                <span className="chip">{jogosAno[id] ?? 0} {(jogosAno[id] ?? 0) === 1 ? 'jogo' : 'jogos'} no ano</span>
-              </div>
-            )
-          })}
-        </div>
+      <p className="muted">Todos os confirmados entram em um time. Quem passa de 14 fica no banco do time e é escolhido pela posição; o nº de jogos no ano só desempata.</p>
+      <TimeLista cor="branco" lista={sorteio.branco} banco={sorteio.reservas_branco ?? []} por={por} venceu={venceu} funcoes={funcoes} jogosAno={jogosAno} />
+      <TimeLista cor="preto" lista={sorteio.preto} banco={sorteio.reservas_preto ?? []} por={por} venceu={venceu} funcoes={funcoes} jogosAno={jogosAno} />
+      {semTime.length > 0 && (
+        <TimeLista cor={null} lista={[]} banco={semTime} por={por} venceu={venceu} funcoes={funcoes} jogosAno={jogosAno} titulo="Reservas" />
       )}
+      <h3>Escalação inicial · formação 2-3-1</h3>
+      <Escalacao sorteio={sorteio} jogadores={jogadores} />
+      <p className="muted">Camisa verde listrada = goleiro. Contorno tracejado = jogando fora da posição.</p>
     </div>
   )
 }
 
-function TimeLista({ cor, lista, por, venceu }: {
-  cor: 'branco' | 'preto'; lista: Escalado[]; por: Map<string, Jogador>; venceu: string | null
+function TimeLista({ cor, lista, banco, por, venceu, funcoes, jogosAno, titulo }: {
+  cor: 'branco' | 'preto' | null
+  lista: Escalado[]
+  banco: string[]
+  por: Map<string, Jogador>
+  venceu: string | null
+  funcoes: Record<string, FuncaoGoleiro>
+  jogosAno: Record<string, number>
+  titulo?: string
 }) {
+  const luva = <span role="img" aria-label="Goleiro" title="Goleiro"> 🧤</span>
   return (
     <div style={{ display: 'grid', gap: '.4rem' }}>
       <div className="time-cab">
-        <span className={`bolinha ${cor}`} />
-        <h3>{NOME_TIME[cor]} ({lista.length}){venceu === cor && ' 🏆'}</h3>
+        {cor && <span className={`bolinha ${cor}`} />}
+        <h3>
+          {titulo ?? NOME_TIME[cor!]} ({lista.length + banco.length}){cor && venceu === cor && ' 🏆'}
+        </h3>
       </div>
       {lista.map((e) => {
         const j = por.get(e.id)
+        const gol = e.slot === 'GOL'
         return (
           <div className="linha" key={e.id}>
             <span className="pos-tag">{NOME_SLOT[e.slot].slice(0, 3).toUpperCase()}</span>
-            <Avatar nome={j ? exibir(j) : '?'} numero={j?.numero_camisa} time={cor} />
-            <span className="grow">{j ? exibir(j) : '—'}</span>
+            <Avatar nome={j ? exibir(j) : '?'} numero={j?.numero_camisa} time={cor ?? undefined} goleiro={gol} />
+            <span className="grow">{j ? exibir(j) : '—'}{gol && luva}</span>
             {e.fora && <span className="chip fora" title="Fora da posição preferida">fora de posição</span>}
           </div>
         )
       })}
+      {banco.length > 0 && (
+        <>
+          <span className="muted">{cor ? 'Banco' : 'Reservas'} ({banco.length})</span>
+          {banco.map((id) => {
+            const j = por.get(id)
+            const gol = ehGoleiroDeHoje(j, funcoes[id])
+            return (
+              <div className="linha" key={id}>
+                <span className="pos-tag">RES</span>
+                <Avatar nome={j ? exibir(j) : '?'} numero={j?.numero_camisa} time={cor ?? undefined} goleiro={gol} />
+                <span className="grow">
+                  {j ? exibir(j) : '—'}{gol && luva}
+                  {j && <span className="muted" style={{ display: 'block' }}>{textoPosicao(j, funcoes[id])}</span>}
+                </span>
+                <span className="chip">{jogosAno[id] ?? 0} {(jogosAno[id] ?? 0) === 1 ? 'jogo' : 'jogos'} no ano</span>
+              </div>
+            )
+          })}
+        </>
+      )}
     </div>
   )
 }

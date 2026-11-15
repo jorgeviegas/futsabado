@@ -52,9 +52,14 @@ export interface Escalado {
 }
 
 export interface Sorteio {
+  /** Titulares de cada time (até 7, com a vaga na formação). */
   branco: Escalado[]
   preto: Escalado[]
-  reservas: string[]
+  /** Banco de cada time: confirmados além dos 14 titulares também entram em um time. */
+  reservas_branco?: string[]
+  reservas_preto?: string[]
+  /** (legado) reservas sem time, de sorteios antigos. */
+  reservas?: string[]
   gerado_em: string
 }
 

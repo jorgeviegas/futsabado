@@ -65,7 +65,7 @@ const grupo = (c: Candidato) => {
 const VAGAS_DO_TIME: Posicao[] = ['goleiro', 'atacante', 'meia', 'zagueiro', 'zagueiro', 'ala', 'ala']
 
 /**
- * Escolhe os 14 que começam jogando; os demais viram reservas (na ordem de prioridade).
+ * Escolhe os 14 que começam jogando; os demais ficam no banco (na ordem de prioridade), mas também entram nos times.
  * Preenche as 14 vagas da formação em três rodadas: posição primária, depois secundária, depois quem sobrar.
  * Em cada vaga, entre quem tem a posição certa, o desempate é o nº de jogos no ano.
  */
@@ -133,10 +133,22 @@ export function sortear(entrada: Candidato[], rnd: () => number = Math.random): 
 
   // sorteia qual grupo é o Branco, para não favorecer sempre o mesmo lado
   const [branco, preto] = rnd() < 0.5 ? [a, b] : [b, a]
+
+  // Quem começa na reserva também entra no sorteio: vai para o banco de um dos times,
+  // alternando na ordem de prioridade para que os bancos fiquem equilibrados.
+  const bancoBranco: string[] = []
+  const bancoPreto: string[] = []
+  let vezBanco = rnd() < 0.5 ? 0 : 1
+  for (const c of reservas) {
+    ;(vezBanco === 0 ? bancoBranco : bancoPreto).push(c.id)
+    vezBanco = 1 - vezBanco
+  }
+
   return {
     branco: escalar(branco),
     preto: escalar(preto),
-    reservas: reservas.map((c) => c.id),
+    reservas_branco: bancoBranco,
+    reservas_preto: bancoPreto,
     gerado_em: new Date().toISOString(),
   }
 }

@@ -115,7 +115,7 @@ alter table public.jogadores add constraint jogadores_camisa_check
 create unique index if not exists jogadores_numero_camisa_uk
   on public.jogadores (numero_camisa) where numero_camisa is not null;
 
--- sorteio: {"branco":[{"id","slot","fora"}], "preto":[...], "reservas":[ids], "gerado_em"}
+-- sorteio: {"branco":[{"id","slot","fora"}], "preto":[...], "reservas_branco":[ids], "reservas_preto":[ids], "gerado_em"}
 alter table public.jogos add column if not exists sorteio jsonb;
 alter table public.jogos add column if not exists time_vencedor text;
 alter table public.jogos drop constraint if exists jogos_time_vencedor_check;
@@ -809,8 +809,12 @@ begin
   return query
     select j.id, j.nome, j.apelido, count(*)::bigint
       from public.jogos g
-      cross join lateral jsonb_array_elements(g.sorteio -> g.time_vencedor) e
-      join public.jogadores j on j.id::text = e ->> 'id'
+      cross join lateral (
+        select e ->> 'id' as pid from jsonb_array_elements(g.sorteio -> g.time_vencedor) e
+        union all
+        select r #>> '{}' from jsonb_array_elements(coalesce(g.sorteio -> ('reservas_' || g.time_vencedor), '[]'::jsonb)) r
+      ) x
+      join public.jogadores j on j.id::text = x.pid
      where g.status = 'realizado'
        and g.time_vencedor in ('branco', 'preto')
        and g.sorteio is not null
@@ -863,11 +867,15 @@ $$;
 create or replace function public._tirar_do_sorteio(p_jogo_id uuid, p_id text)
 returns void language sql security definer set search_path = public as $$
   update public.jogos g
-     set sorteio = jsonb_build_object(
-       'branco',   coalesce((select jsonb_agg(e) from jsonb_array_elements(g.sorteio -> 'branco') e where e ->> 'id' <> p_id), '[]'::jsonb),
-       'preto',    coalesce((select jsonb_agg(e) from jsonb_array_elements(g.sorteio -> 'preto') e where e ->> 'id' <> p_id), '[]'::jsonb),
-       'reservas', coalesce((select jsonb_agg(r) from jsonb_array_elements(g.sorteio -> 'reservas') r where r #>> '{}' <> p_id), '[]'::jsonb),
-       'gerado_em', g.sorteio -> 'gerado_em')
+     set sorteio = (
+       select jsonb_object_agg(
+         t.k,
+         case when jsonb_typeof(t.v) = 'array'
+              then coalesce((select jsonb_agg(e)
+                               from jsonb_array_elements(t.v) e
+                              where coalesce(e ->> 'id', e #>> '{}') <> p_id), '[]'::jsonb)
+              else t.v end)
+         from jsonb_each(g.sorteio) as t(k, v))
    where g.id = p_jogo_id and g.sorteio is not null;
 $$;
 

@@ -192,3 +192,9 @@ select { background-image: linear-gradient(45deg, transparent 50%, var(--texto-2
 
 .btn-presenca.espera { color: var(--aviso); border-color: var(--aviso); background: #2c2410; }
 .btn-presenca.espera.ativo { background: var(--aviso); color: #231a02; box-shadow: 0 0 0 3px #e0a52644; }
+
+/* Camisa de goleiro: verde listrado (mantém a borda do time) */
+.avatar.goleiro, .avatar.goleiro.time-preto, .avatar.goleiro.time-branco {
+  background: repeating-linear-gradient(90deg, #43b05f 0 3px, #1d6f36 3px 6px);
+  color: #fff; text-shadow: 0 0 3px #06240f, 0 0 3px #06240f, 0 0 2px #06240f;
+}

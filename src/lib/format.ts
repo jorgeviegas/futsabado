@@ -1,3 +1,5 @@
+import type { FuncaoGoleiro, Jogador } from './types'
+
 export const DIAS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
 
 export const POSICOES: Record<string, string> = {
@@ -65,4 +67,13 @@ export function somaDias(iso: string, n: number): string {
   const d = parseData(iso)
   d.setDate(d.getDate() + n)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/** Posição do jogador neste jogo: a primária (ou, se o goleiro vai jogar na linha, a secundária) e a secundária. */
+export function textoPosicao(j: Jogador, funcao?: FuncaoGoleiro): string {
+  const naLinha = j.posicao === 'goleiro' && funcao === 'linha' && j.posicao_secundaria
+  const principal = naLinha ? j.posicao_secundaria : j.posicao
+  const secundaria = naLinha ? null : j.posicao_secundaria
+  if (!principal) return 'Posição livre'
+  return POSICOES[principal] + (secundaria ? ` · ${POSICOES[secundaria]}` : '')
 }

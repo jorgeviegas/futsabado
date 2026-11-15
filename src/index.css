@@ -198,3 +198,16 @@ select { background-image: linear-gradient(45deg, transparent 50%, var(--texto-2
   background: repeating-linear-gradient(90deg, #43b05f 0 3px, #1d6f36 3px 6px);
   color: #fff; text-shadow: 0 0 3px #06240f, 0 0 3px #06240f, 0 0 2px #06240f;
 }
+
+/* Tela pós-jogo: escalações lado a lado com o placar */
+.avatar.peq { width: 28px; height: 28px; font-size: .72rem; border-width: 2px; }
+.lado-a-lado { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: .6rem; align-items: start; }
+.time-col { display: grid; gap: .35rem; align-content: start; }
+.time-col .time-cab h3 { font-size: .95rem; }
+.linha-c { display: flex; align-items: center; gap: .4rem; min-width: 0; }
+.linha-c .nome { flex: 1; min-width: 0; font-size: .9rem; line-height: 1.15; overflow-wrap: anywhere; }
+.pago { display: inline-grid; place-items: center; width: 1.15rem; height: 1.15rem; margin-left: .3rem; border-radius: 50%; background: var(--ok); color: #05200f; font-size: .72rem; font-weight: 800; vertical-align: middle; }
+.isento { margin-left: .3rem; font-size: .68rem; color: var(--texto-2); border: 1px solid var(--borda); border-radius: 99px; padding: 0 .4rem; vertical-align: middle; }
+.placar-form { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: .6rem; align-items: end; }
+.placar-form .x { padding-bottom: .7rem; color: var(--texto-2); font-weight: 700; }
+.faltou-linha { display: flex; align-items: center; gap: .6rem; padding: .25rem 0; }

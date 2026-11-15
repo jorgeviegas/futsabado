@@ -35,11 +35,13 @@ export function Modal({ titulo, onFechar, children }: { titulo: string; onFechar
 }
 
 /** Mostra o número da camisa, quando o jogador tem um; senão, as iniciais. */
-export function Avatar({ nome, numero, time, goleiro = false }: { nome: string; numero?: number | null; time?: 'branco' | 'preto'; goleiro?: boolean }) {
+export function Avatar({ nome, numero, time, goleiro = false, pequeno = false }: {
+  nome: string; numero?: number | null; time?: 'branco' | 'preto'; goleiro?: boolean; pequeno?: boolean
+}) {
   const ini = nome.trim().split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase()).join('')
   const temNumero = numero != null
   return (
-    <div className={`avatar ${temNumero ? 'num' : ''} ${time ? `time-${time}` : ''} ${goleiro ? 'goleiro' : ''}`} aria-hidden>
+    <div className={`avatar ${temNumero ? 'num' : ''} ${time ? `time-${time}` : ''} ${goleiro ? 'goleiro' : ''} ${pequeno ? 'peq' : ''}`} aria-hidden>
       {temNumero ? numero : ini}
     </div>
   )

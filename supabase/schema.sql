@@ -378,7 +378,8 @@ declare
 begin
   select p.limite_jogadores into v_limite
     from public.jogos j join public.peladas p on p.id = j.pelada_id
-   where j.id = p_jogo_id and j.status = 'agendado';
+   where j.id = p_jogo_id and j.status = 'agendado'
+     and (j.data + j.horario) > (now() at time zone 'America/Sao_Paulo');  -- depois do início, ninguém é promovido
   if not found then
     return 0;
   end if;
@@ -993,6 +994,66 @@ begin
 end;
 $$;
 
+-- Admin: encerra a partida de uma vez só (atômico): marca quem faltou, registra o placar e marca como realizado.
+-- Com placar, o banco define o vencedor e a votação do craque abre automaticamente.
+create or replace function public.encerrar_jogo(
+  p_jogo_id uuid,
+  p_faltosos uuid[] default '{}',
+  p_convidados_faltosos uuid[] default '{}',
+  p_placar_branco int default null,
+  p_placar_preto int default null
+)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  v uuid;
+begin
+  if not public.is_admin() then
+    raise exception 'Apenas administradores podem encerrar o jogo';
+  end if;
+  if (p_placar_branco is null) <> (p_placar_preto is null) then
+    raise exception 'Informe o placar dos dois times';
+  end if;
+  if not exists (select 1 from public.jogos where id = p_jogo_id and status <> 'cancelado') then
+    raise exception 'Jogo não encontrado ou cancelado';
+  end if;
+
+  -- 1º os faltosos (antes de a votação abrir), 2º o placar/encerramento
+  foreach v in array coalesce(p_faltosos, '{}') loop
+    perform public.remover_faltoso(p_jogo_id, v);
+  end loop;
+  foreach v in array coalesce(p_convidados_faltosos, '{}') loop
+    if exists (select 1 from public.convidados c where c.id = v and c.jogo_id = p_jogo_id) then
+      perform public.remover_convidado(v);
+    end if;
+  end loop;
+
+  update public.jogos
+     set placar_branco = coalesce(p_placar_branco, placar_branco),
+         placar_preto  = coalesce(p_placar_preto, placar_preto),
+         status = case when status = 'agendado' then 'realizado' else status end
+   where id = p_jogo_id;
+end;
+$$;
+
+-- Quem já pagou (jogo ou mensalidade do mês do jogo): todos os membros veem o ✓ ao lado do nome.
+-- Mostra só quem JÁ pagou; pendências continuam privadas.
+create or replace function public.pagamentos_do_jogo(p_jogo_id uuid)
+returns table (jogador_id uuid, convidado_id uuid)
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.is_membro() then
+    raise exception 'Acesso negado';
+  end if;
+  return query
+    select p.jogador_id, p.convidado_id
+      from public.pagamentos p
+      join public.jogos g on g.id = p_jogo_id
+     where p.pago
+       and ((p.tipo in ('avulso', 'convidado') and p.jogo_id = p_jogo_id)
+         or (p.tipo = 'mensalidade' and p.competencia = date_trunc('month', g.data)::date));
+end;
+$$;
+
 -- Permissões de execução das funções
 revoke execute on function public.gerar_jogos(uuid, int) from public, anon;
 revoke execute on function public.resultado_votacao(uuid) from public, anon;
@@ -1006,6 +1067,8 @@ revoke execute on function public._tirar_do_sorteio(uuid, text) from public, ano
 revoke execute on function public.promover_espera(uuid) from public, anon, authenticated;
 revoke execute on function public.vagas_ocupadas(uuid, uuid) from public, anon, authenticated;
 revoke execute on function public.remover_faltoso(uuid, uuid) from public, anon;
+revoke execute on function public.encerrar_jogo(uuid, uuid[], uuid[], int, int) from public, anon;
+revoke execute on function public.pagamentos_do_jogo(uuid) from public, anon;
 revoke execute on function public.remover_convidado(uuid) from public, anon;
 revoke execute on function public.caixa_extrato(int) from public, anon;
 revoke execute on function public.caixa_resumo() from public, anon;
@@ -1021,6 +1084,8 @@ grant execute on function public.jogos_no_ano(int) to authenticated;
 grant execute on function public.marcar_pagamento(uuid, text, date, uuid, numeric, boolean, uuid) to authenticated;
 grant execute on function public.processar_jogos() to authenticated;
 grant execute on function public.remover_faltoso(uuid, uuid) to authenticated;
+grant execute on function public.encerrar_jogo(uuid, uuid[], uuid[], int, int) to authenticated;
+grant execute on function public.pagamentos_do_jogo(uuid) to authenticated;
 grant execute on function public.remover_convidado(uuid) to authenticated;
 grant execute on function public.caixa_extrato(int) to authenticated;
 grant execute on function public.caixa_resumo() to authenticated;

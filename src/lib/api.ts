@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from './supabase'
-import { hojeISO } from './format'
+import { hojeISO, somaDias } from './format'
 import { gerarCobrancas, type ConvidadoJogou, type Jogou } from './financeiro'
 import type {
   Convidado, ExtratoItem, FuncaoGoleiro, Jogador, Jogo, Lancamento, Pagamento, Pelada, Presenca, RankingAssiduo,
@@ -320,7 +320,7 @@ export const useMarcarPagamento = () =>
           p_convidado_id: v.convidadoId ?? null,
         }),
       ),
-    [['cobrancas'], ['caixa']],
+    [['cobrancas'], ['caixa'], ['pagosJogo']],
   )
 
 const JOGO_REF = 'jogos!inner(id, data, valor, status, sorteio, peladas(nome, valor_avulso, goleiros_isentos))'
@@ -433,4 +433,49 @@ export const useMeusVotos = (eleitorId: string | undefined, jogoIds: string[]) =
     enabled: Boolean(eleitorId) && jogoIds.length > 0,
     queryFn: async () =>
       ok(await supabase.from('votos').select('*').eq('eleitor_id', eleitorId!).in('jogo_id', jogoIds)) as Voto[],
+  })
+
+// ---------- Encerramento do jogo ----------
+/** Admin: encerra a partida de uma vez (faltosos + placar). A votação do craque abre sozinha. */
+export const useEncerrarJogo = () =>
+  useAcao(
+    async (v: { jogoId: string; faltosos: string[]; convidadosFaltosos: string[]; placarBranco: number | null; placarPreto: number | null }) =>
+      ok(
+        await supabase.rpc('encerrar_jogo', {
+          p_jogo_id: v.jogoId,
+          p_faltosos: v.faltosos,
+          p_convidados_faltosos: v.convidadosFaltosos,
+          p_placar_branco: v.placarBranco,
+          p_placar_preto: v.placarPreto,
+        }),
+      ),
+    [['jogos'], ['jogo'], ['presencas'], ['convidados'], ['voto'], ['totalVotos'], ['resultado'], ['cobrancas'], ['ranking'], ['jogosNoAno'], ['pagosJogo'], ['caixa']],
+  )
+
+/** Quem já pagou neste jogo: "id do jogador" ou "c_<id do convidado>" (todos os membros veem o ✓). */
+export const usePagosDoJogo = (jogoId: string | undefined, habilitado = true) =>
+  useQuery({
+    queryKey: ['pagosJogo', jogoId],
+    enabled: Boolean(jogoId) && habilitado,
+    queryFn: async () => {
+      const rows = ok(await supabase.rpc('pagamentos_do_jogo', { p_jogo_id: jogoId! })) as { jogador_id: string; convidado_id: string | null }[]
+      return new Set(rows.map((r) => (r.convidado_id ? `c_${r.convidado_id}` : r.jogador_id)))
+    },
+  })
+
+/** Jogos realizados recentemente que ainda estão sem placar (aviso para admins). */
+export const useJogosSemPlacar = (habilitado: boolean) =>
+  useQuery({
+    queryKey: ['jogos', 'semPlacar'],
+    enabled: habilitado,
+    queryFn: async () =>
+      ok(
+        await supabase
+          .from('jogos')
+          .select(JOGO_SELECT)
+          .eq('status', 'realizado')
+          .is('placar_branco', null)
+          .gte('data', somaDias(hojeISO(), -14))
+          .order('data', { ascending: false }),
+      ) as unknown as Jogo[],
   })

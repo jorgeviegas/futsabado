@@ -3,13 +3,15 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   useAdicionarConvidado, useAtualizarJogo, useConvidados, useDefinirPresenca, useExcluirJogo, useJogadores, useJogo,
   useJogosNoAno, useLiberacao, useMeuVoto, usePresencas, useRemoverConvidado, useRemoverFaltoso, useResultado,
-  useTotalVotos, useVotar,
+  useTotalVotos, useVotar, usePagosDoJogo,
 } from '../lib/api'
 import { sortear } from '../lib/sorteio'
+import EncerrarJogo from '../components/EncerrarJogo'
+import PosJogo from '../components/PosJogo'
 import Escalacao from '../components/Escalacao'
 import ClimaJogo from '../components/ClimaJogo'
 import { useAuth } from '../lib/auth'
-import { confirmacaoLiberada, exibir, formatarData, formatarHora, hojeISO, placarTexto } from '../lib/format'
+import { confirmacaoLiberada, exibir, formatarData, formatarHora, hojeISO, textoPosicao } from '../lib/format'
 import { Avatar, Erro, Modal, Spinner } from '../components/ui'
 import type { Convidado, Escalado, FuncaoGoleiro, Jogador, Posicao, StatusPresenca } from '../lib/types'
 import { POSICOES, moeda } from '../lib/format'
@@ -34,9 +36,11 @@ export default function JogoDetalhe() {
   const excluir = useExcluirJogo()
   const [editando, setEditando] = useState(false)
   const [escolhendoFuncao, setEscolhendoFuncao] = useState(false)
+  const [encerrando, setEncerrando] = useState(false)
   const { data: jogosAno = {} } = useJogosNoAno()
   const { data: convidados = [] } = useConvidados(id)
   const { data: liberaEm } = useLiberacao(id)
+  const { data: pagos } = usePagosDoJogo(id, jogo?.status === 'realizado')
 
   if (isLoading) return <Spinner />
   if (error || !jogo) return <Erro erro={error ?? new Error('Jogo não encontrado')} />
@@ -72,6 +76,8 @@ export default function JogoDetalhe() {
   // jogo cheio e eu fora da lista de confirmados: o botão vira "lista de espera"
   const vaiParaFila = cheio && !euConfirmado
   const agendado = jogo.status === 'agendado'
+  // jogo encerrado: tela enxuta (só informações, escalações com o placar e a votação)
+  const posJogo = jogo.status === 'realizado'
 
   function sortearTimes() {
     if (jogo!.sorteio && !confirm('Já existe um sorteio. Sortear de novo e substituir?')) return
@@ -101,96 +107,103 @@ export default function JogoDetalhe() {
         </div>
         <ClimaJogo jogo={jogo} grande />
         {jogo.valor != null && <div className="muted">💵 {moeda(jogo.valor)} por jogador{jogo.peladas?.goleiros_isentos ? ' · goleiros isentos 🧤' : ''}</div>}
-        {placarTexto(jogo) && <div style={{ fontSize: '1.15rem' }}><strong>{placarTexto(jogo)}</strong></div>}
-        {jogo.time_vencedor && <div className="muted">{jogo.time_vencedor === 'empate' ? 'Empate' : `Vitória do ${NOME_TIME[jogo.time_vencedor]}`}</div>}
-        {jogo.status === 'realizado' && !placarTexto(jogo) && <div className="muted">Placar ainda não registrado.</div>}
         {jogo.observacoes && <div className="muted">{jogo.observacoes}</div>}
       </div>
 
-      {agendado && eu && !liberada && (
-        <div className="card">
-          <h2>Você vai?</h2>
-          <p className="muted">A confirmação de presença abre em <strong>{formatarData(liberaEm!)}</strong></p>
-        </div>
-      )}
-
-      {agendado && eu && liberada && (
-        <div className="card">
-          <h2>Você vai?</h2>
-          {isAdmin && !confirmacaoLiberada(liberaEm) && <p className="muted">Ainda não aberta para os jogadores (abre em {formatarData(liberaEm!)}); você, como admin, pode confirmar.</p>}
-          <div className="presenca">
-            {OPCOES.map((o) => {
-              const ehVou = o.v === 'confirmado'
-              const ativo = ehVou ? euConfirmado || naFila : minha === o.v
-              return (
-                <button
-                  key={o.v}
-                  type="button"
-                  aria-pressed={ativo}
-                  className={`btn-presenca ${ehVou && (naFila || (vaiParaFila && !euConfirmado)) ? 'espera' : o.cls} ${ativo ? 'ativo' : ''}`}
-                  disabled={definir.isPending}
-                  onClick={() => {
-                    if (ehVou && precisaFuncao && !euConfirmado && !naFila) return setEscolhendoFuncao(true)
-                    setEscolhendoFuncao(false)
-                    // sair da lista/da presença: grava vazio; entrar: o banco decide se confirma ou manda para a espera
-                    definir.mutate({ jogoId: jogo.id, jogadorId: eu.id, status: ativo ? null : o.v })
-                  }}
-                >
-                  {ehVou ? (naFila ? '⏳ Na lista de espera' : vaiParaFila ? '⏳ Lista de espera' : o.rot) : o.rot}
-                </button>
-              )
-            })}
+      {posJogo ? (
+        <PosJogo
+          jogo={jogo} jogadores={todos} participantes={participantes} funcoes={funcoes} pagos={pagos}
+          isAdmin={isAdmin} onRegistrar={() => setEncerrando(true)}
+        />
+      ) : (
+        <>
+        {agendado && eu && !liberada && (
+          <div className="card">
+            <h2>Você vai?</h2>
+            <p className="muted">A confirmação de presença abre em <strong>{formatarData(liberaEm!)}</strong></p>
           </div>
-          {naFila && (
-            <p className="muted">
-              Você está em <strong>{posicaoNaFila}º</strong> na lista de espera. Se alguém cancelar, você entra automaticamente.
-              Toque de novo para sair da fila.
-            </p>
-          )}
-          {precisaFuncao && (escolhendoFuncao || euConfirmado || naFila) && (
-            <div className="form" style={{ borderTop: '1px solid var(--borda)', paddingTop: '.7rem' }}>
-              <strong>🧤 Você é goleiro. Onde vai jogar neste jogo?</strong>
-              <div className="seg">
-                {([['gol', '🧤 No gol'], ['linha', `🏃 Na linha (${POSICOES[eu.posicao_secundaria!]})`]] as [FuncaoGoleiro, string][]).map(([f, rot]) => (
+        )}
+
+        {agendado && eu && liberada && (
+          <div className="card">
+            <h2>Você vai?</h2>
+            {isAdmin && !confirmacaoLiberada(liberaEm) && <p className="muted">Ainda não aberta para os jogadores (abre em {formatarData(liberaEm!)}); você, como admin, pode confirmar.</p>}
+            <div className="presenca">
+              {OPCOES.map((o) => {
+                const ehVou = o.v === 'confirmado'
+                const ativo = ehVou ? euConfirmado || naFila : minha === o.v
+                return (
                   <button
-                    key={f}
+                    key={o.v}
                     type="button"
-                    className={(euConfirmado || naFila) && (minhaPres?.funcao ?? 'gol') === f ? 'ativo ok' : ''}
+                    aria-pressed={ativo}
+                    className={`btn-presenca ${ehVou && (naFila || (vaiParaFila && !euConfirmado)) ? 'espera' : o.cls} ${ativo ? 'ativo' : ''}`}
                     disabled={definir.isPending}
                     onClick={() => {
+                      if (ehVou && precisaFuncao && !euConfirmado && !naFila) return setEscolhendoFuncao(true)
                       setEscolhendoFuncao(false)
-                      definir.mutate({ jogoId: jogo.id, jogadorId: eu.id, status: 'confirmado', funcao: f })
+                      // sair da lista/da presença: grava vazio; entrar: o banco decide se confirma ou manda para a espera
+                      definir.mutate({ jogoId: jogo.id, jogadorId: eu.id, status: ativo ? null : o.v })
                     }}
                   >
-                    {rot}
+                    {ehVou ? (naFila ? '⏳ Na lista de espera' : vaiParaFila ? '⏳ Lista de espera' : o.rot) : o.rot}
                   </button>
-                ))}
-              </div>
-              {!euConfirmado && !naFila && <span className="muted">Escolha uma opção para confirmar sua presença.</span>}
+                )
+              })}
             </div>
-          )}
-          {vaiParaFila && !naFila && <p className="muted">Jogo cheio ({limite} jogadores). Quem entrar agora fica na lista de espera e é chamado se alguém cancelar.</p>}
-          <Erro erro={definir.error} />
-        </div>
-      )}
+            {naFila && (
+              <p className="muted">
+                Você está em <strong>{posicaoNaFila}º</strong> na lista de espera. Se alguém cancelar, você entra automaticamente.
+                Toque de novo para sair da fila.
+              </p>
+            )}
+            {precisaFuncao && (escolhendoFuncao || euConfirmado || naFila) && (
+              <div className="form" style={{ borderTop: '1px solid var(--borda)', paddingTop: '.7rem' }}>
+                <strong>🧤 Você é goleiro. Onde vai jogar neste jogo?</strong>
+                <div className="seg">
+                  {([['gol', '🧤 No gol'], ['linha', `🏃 Na linha (${POSICOES[eu.posicao_secundaria!]})`]] as [FuncaoGoleiro, string][]).map(([f, rot]) => (
+                    <button
+                      key={f}
+                      type="button"
+                      className={(euConfirmado || naFila) && (minhaPres?.funcao ?? 'gol') === f ? 'ativo ok' : ''}
+                      disabled={definir.isPending}
+                      onClick={() => {
+                        setEscolhendoFuncao(false)
+                        definir.mutate({ jogoId: jogo.id, jogadorId: eu.id, status: 'confirmado', funcao: f })
+                      }}
+                    >
+                      {rot}
+                    </button>
+                  ))}
+                </div>
+                {!euConfirmado && !naFila && <span className="muted">Escolha uma opção para confirmar sua presença.</span>}
+              </div>
+            )}
+            {vaiParaFila && !naFila && <p className="muted">Jogo cheio ({limite} jogadores). Quem entrar agora fica na lista de espera e é chamado se alguém cancelar.</p>}
+            <Erro erro={definir.error} />
+          </div>
+        )}
 
-      <Lista
-        titulo={`Confirmados (${participantes.length}${limite ? `/${limite}` : ''})`}
-        lista={participantes}
-        convidadoDe={donoDoConvidado}
-        posicoes
-        funcoes={funcoes}
-      />
-      {esperando.length > 0 && (
-        <Lista titulo={`⏳ Lista de espera (${esperando.length})`} lista={esperando} ordem posicoes funcoes={funcoes} />
-      )}
-      {(agendado || convidados.length > 0) && (
-        <Convidados jogo={jogo} convidados={convidados} jogadores={jogadores} podeConvidar={agendado && liberada && !cheio} cheio={agendado && cheio} />
-      )}
+        <Lista
+          titulo={`Confirmados (${participantes.length}${limite ? `/${limite}` : ''})`}
+          lista={participantes}
+          convidadoDe={donoDoConvidado}
+          posicoes
+          funcoes={funcoes}
+        />
+        {esperando.length > 0 && (
+          <Lista titulo={`⏳ Lista de espera (${esperando.length})`} lista={esperando} ordem posicoes funcoes={funcoes} />
+        )}
+        {(agendado || convidados.length > 0) && (
+          <Convidados jogo={jogo} convidados={convidados} jogadores={jogadores} podeConvidar={agendado && liberada && !cheio} cheio={agendado && cheio} />
+        )}
 
-      {ausentes.length > 0 && <Lista titulo={`Não vão (${ausentes.length})`} lista={ausentes} />}
+        {ausentes.length > 0 && <Lista titulo={`Não vão (${ausentes.length})`} lista={ausentes} />}
 
-      {jogo.sorteio && <Times jogo={jogo} jogadores={todos} jogosAno={jogosAno} funcoes={funcoes} />}
+        {jogo.sorteio && <Times jogo={jogo} jogadores={todos} jogosAno={jogosAno} funcoes={funcoes} />}
+
+        </>
+      )}
 
       {jogo.status === 'realizado' || jogo.votacao_aberta ? (
         <Votacao jogoId={jogo.id} aberta={jogo.votacao_aberta} confirmados={confirmados} />
@@ -201,21 +214,22 @@ export default function JogoDetalhe() {
           <h2>Administração</h2>
           <div className="linha wrap">
             <button className="btn sec peq" onClick={() => setEditando(true)}>✏️ Editar jogo</button>
-            {jogo.status !== 'cancelado' && (
+            {!posJogo && jogo.status !== 'cancelado' && (
               <button className="btn peq" disabled={confirmados.length < 2 || atualizar.isPending} onClick={sortearTimes}>
                 🎲 {jogo.sorteio ? 'Sortear de novo' : 'Sortear times'}
               </button>
             )}
-            {jogo.sorteio && (
+            {!posJogo && jogo.sorteio && (
               <button className="btn sec peq" onClick={() => confirm('Remover o sorteio?') && atualizar.mutate({ id: jogo.id, sorteio: null })}>Limpar sorteio</button>
             )}
             {agendado && (
               <button className="btn sec peq" onClick={() => atualizar.mutate({ id: jogo.id, status: 'cancelado' })}>🚫 Cancelar</button>
             )}
-            {jogo.status === 'agendado' && (
-              <button className="btn peq" onClick={() => atualizar.mutate({ id: jogo.id, status: 'realizado' })}>
-                ✅ Marcar como realizado
-              </button>
+            {agendado && (
+              <button className="btn peq" onClick={() => setEncerrando(true)}>✅ Encerrar jogo</button>
+            )}
+            {posJogo && (
+              <button className="btn peq" onClick={() => setEncerrando(true)}>📝 Placar e faltosos</button>
             )}
             {jogo.status === 'realizado' && !jogo.votacao_aberta && (
               <button className="btn sec peq" onClick={() => atualizar.mutate({ id: jogo.id, votacao_aberta: true })}>🗳️ Reabrir votação</button>
@@ -240,6 +254,10 @@ export default function JogoDetalhe() {
         </div>
       )}
 
+      {encerrando && (
+        <EncerrarJogo jogo={jogo} participantes={participantes} funcoes={funcoes} onFechar={() => setEncerrando(false)} />
+      )}
+
       {editando && (
         <EditarJogo
           jogo={jogo}
@@ -248,15 +266,6 @@ export default function JogoDetalhe() {
       )}
     </>
   )
-}
-
-/** Posição do jogador neste jogo: a primária (ou, se o goleiro vai jogar na linha, a secundária) e a secundária. */
-function textoPosicao(j: Jogador, funcao?: FuncaoGoleiro): string {
-  const naLinha = j.posicao === 'goleiro' && funcao === 'linha' && j.posicao_secundaria
-  const principal = naLinha ? j.posicao_secundaria : j.posicao
-  const secundaria = naLinha ? null : j.posicao_secundaria
-  if (!principal) return 'Posição livre'
-  return POSICOES[principal] + (secundaria ? ` · ${POSICOES[secundaria]}` : '')
 }
 
 function Lista({ titulo, lista, funcoes = {}, convidadoDe = {}, ordem = false, posicoes = false }: {

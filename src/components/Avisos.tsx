@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import {
-  useCobrancas, useJogadores, useJogosSemEncerrar, useJogosVotacaoAberta, useLiberacao, useMeusVotos, useMinhasPresencas,
+  useCobrancas, useJogadores, useJogosSemEncerrar, useJogosSemPlacar, useJogosVotacaoAberta, useLiberacao, useMeusVotos, useMinhasPresencas,
   useProximoJogo,
 } from '../lib/api'
 import { useAuth } from '../lib/auth'
@@ -26,6 +26,7 @@ export default function Avisos() {
   const { data: proximo } = useProximoJogo()
   const { data: liberaEm } = useLiberacao(proximo?.id)
   const { data: semEncerrar = [] } = useJogosSemEncerrar(isAdmin)
+  const { data: semPlacar = [] } = useJogosSemPlacar(isAdmin)
   const { data: jogadores = [] } = useJogadores()
 
   const ids = [...new Set([...abertas, ...(proximo ? [proximo] : [])].map((j) => j.id))]
@@ -90,7 +91,16 @@ export default function Avisos() {
     semEncerrar.forEach((j) =>
       avisos.push({
         chave: `enc-${j.id}`, icone: '✅', destaque: true,
-        titulo: 'Encerre o jogo e abra a votação',
+        titulo: 'Encerre o jogo: placar e faltantes',
+        detalhe: `${j.peladas?.nome ?? 'Pelada'} · ${formatarData(j.data)}`,
+        to: `/jogo/${j.id}`,
+      }),
+    )
+    // 3b) Admin: jogos realizados ainda sem placar
+    semPlacar.forEach((j) =>
+      avisos.push({
+        chave: `placar-${j.id}`, icone: '📝', destaque: true,
+        titulo: 'Registre o placar e os faltantes',
         detalhe: `${j.peladas?.nome ?? 'Pelada'} · ${formatarData(j.data)}`,
         to: `/jogo/${j.id}`,
       }),

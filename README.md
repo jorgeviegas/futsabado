@@ -90,6 +90,9 @@ Abra a URL no celular → Chrome: **Instalar app / Adicionar à tela inicial** �
   votação abre sozinha; registrar o placar também marca o jogo como realizado e abre a votação. Antes disso, o admin
   pode remover quem **não compareceu** ("Quem não compareceu?" na tela do jogo): some do sorteio, da cobrança, da
   votação e do ranking de assiduidade. O admin encerra a votação para revelar o craque.
+- **Encerrar a partida (admin):** o botão "Encerrar jogo" abre uma tela que pede o **placar** e a lista de jogadores para
+  marcar os **faltantes**; tudo é gravado de uma vez e a votação do craque abre sozinha. Depois do jogo, a tela mostra só
+  as informações, o placar com as **escalações lado a lado** (✓ ao lado de quem já pagou) e a votação.
 - **Convidados:** qualquer jogador convida um avulso (nome e posição opcional) enquanto o jogo está agendado. O
   convidado ocupa vaga, entra no sorteio e paga o mesmo valor; quem convidou fica responsável pelo pagamento.
 - **Lista de espera:** com o jogo cheio, quem toca em "Vou" entra na lista de espera (botão âmbar, com a posição na

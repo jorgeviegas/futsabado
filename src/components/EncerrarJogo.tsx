@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useEncerrarJogo } from '../lib/api'
+import { useEncerrarJogo, usePresencas } from '../lib/api'
 import { exibir, textoPosicao } from '../lib/format'
 import { Avatar, Erro, Modal } from './ui'
 import type { FuncaoGoleiro, Jogador, Jogo } from '../lib/types'
@@ -18,7 +18,18 @@ export default function EncerrarJogo({ jogo, participantes, funcoes, onFechar }:
   const encerrar = useEncerrarJogo()
   const [branco, setBranco] = useState(jogo.placar_branco?.toString() ?? '')
   const [preto, setPreto] = useState(jogo.placar_preto?.toString() ?? '')
+  const { data: pres = [] } = usePresencas(jogo.id)
   const [faltou, setFaltou] = useState<Set<string>>(new Set())
+  // gols/assistências digitados; quem não foi mexido mostra o valor já gravado (ao reabrir um jogo encerrado)
+  const [edit, setEdit] = useState<Record<string, { g?: number; a?: number }>>({})
+  const gravado = (id: string) => pres.find((p) => p.jogador_id === id)
+  const gols = (id: string) => edit[id]?.g ?? gravado(id)?.gols ?? 0
+  const assist = (id: string) => edit[id]?.a ?? gravado(id)?.assistencias ?? 0
+  const ajustar = (id: string, campo: 'g' | 'a', delta: number) =>
+    setEdit((e) => {
+      const atual = campo === 'g' ? gols(id) : assist(id)
+      return { ...e, [id]: { ...e[id], [campo]: Math.max(0, Math.min(50, atual + delta)) } }
+    })
   const placarOk = branco !== '' && preto !== '' && Number(branco) >= 0 && Number(preto) >= 0
   const agendado = jogo.status === 'agendado'
 
@@ -38,6 +49,9 @@ export default function EncerrarJogo({ jogo, participantes, funcoes, onFechar }:
         convidadosFaltosos: ids.filter((id) => id.startsWith('c_')).map((id) => id.slice(2)),
         placarBranco: comPlacar ? Number(branco) : null,
         placarPreto: comPlacar ? Number(preto) : null,
+        estatisticas: participantes
+          .filter((j) => !j.id.startsWith('c_') && !faltou.has(j.id))
+          .map((j) => ({ jogador_id: j.id, gols: gols(j.id), assistencias: assist(j.id) })),
       },
       { onSuccess: onFechar },
     )
@@ -60,8 +74,8 @@ export default function EncerrarJogo({ jogo, participantes, funcoes, onFechar }:
         </div>
 
         <div className="form">
-          <strong>Quem não compareceu?</strong>
-          <span className="muted">Marque quem confirmou e não apareceu: sai dos times, da cobrança e da votação.</span>
+          <strong>Quem jogou</strong>
+          <span className="muted">Marque “Faltou” para quem não apareceu (sai dos times, da cobrança e da votação) e some gols ⚽ e assistências 🍽️.</span>
           {participantes.length === 0 && <span className="muted">Ninguém confirmado.</span>}
           {participantes.map((j) => {
             const marcado = faltou.has(j.id)
@@ -82,6 +96,12 @@ export default function EncerrarJogo({ jogo, participantes, funcoes, onFechar }:
                 >
                   {marcado ? '✕ Faltou' : 'Faltou'}
                 </button>
+                {!marcado && !j.id.startsWith('c_') && (
+                  <div className="stats-linha">
+                    <Contador icone="⚽" rotulo="Gols" valor={gols(j.id)} onMudar={(d) => ajustar(j.id, 'g', d)} />
+                    <Contador icone="🍽️" rotulo="Assistências" valor={assist(j.id)} onMudar={(d) => ajustar(j.id, 'a', d)} />
+                  </div>
+                )}
               </div>
             )
           })}
@@ -99,5 +119,16 @@ export default function EncerrarJogo({ jogo, participantes, funcoes, onFechar }:
         )}
       </form>
     </Modal>
+  )
+}
+
+function Contador({ icone, rotulo, valor, onMudar }: { icone: string; rotulo: string; valor: number; onMudar: (delta: number) => void }) {
+  return (
+    <div className="contador" role="group" aria-label={rotulo}>
+      <span aria-hidden>{icone}</span>
+      <button type="button" aria-label={`Menos ${rotulo.toLowerCase()}`} disabled={valor <= 0} onClick={() => onMudar(-1)}>−</button>
+      <strong>{valor}</strong>
+      <button type="button" aria-label={`Mais ${rotulo.toLowerCase()}`} onClick={() => onMudar(1)}>+</button>
+    </div>
   )
 }

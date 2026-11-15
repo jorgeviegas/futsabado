@@ -102,6 +102,9 @@ export interface Presenca {
   funcao: FuncaoGoleiro | null
   /** Quando entrou na lista de espera (define a ordem da fila). */
   espera_desde: string | null
+  /** Gols e assistências no jogo (registrados pelo admin ao encerrar). */
+  gols: number
+  assistencias: number
 }
 
 export interface Voto {
@@ -141,6 +144,14 @@ export interface RankingCraque {
   nome: string
   apelido: string | null
   premios: number
+}
+
+export interface RankingEstatistica {
+  jogador_id: string
+  nome: string
+  apelido: string | null
+  total: number
+  jogos: number
 }
 
 export interface RankingVencedor {

@@ -293,6 +293,31 @@ alter table public.avisos_avulsos add column if not exists enviar_push boolean n
 alter table public.avisos_avulsos add column if not exists push_enviado_em timestamptz;
 alter table public.push_preferencias add column if not exists aviso_time boolean not null default true;
 
+-- v15: gols e assistências por jogador em cada jogo (registrados pelo admin ao encerrar a partida)
+alter table public.presencas add column if not exists gols int not null default 0;
+alter table public.presencas add column if not exists assistencias int not null default 0;
+alter table public.presencas drop constraint if exists presencas_estatisticas_check;
+alter table public.presencas add constraint presencas_estatisticas_check check (gols between 0 and 50 and assistencias between 0 and 50);
+
+-- Só admin altera gols/assistências (o jogador pode editar a própria presença, mas não o seu desempenho).
+create or replace function public.presencas_protege_estatisticas()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is not null and not public.is_admin() then
+    if tg_op = 'INSERT' then
+      new.gols := 0; new.assistencias := 0;
+    else
+      new.gols := old.gols; new.assistencias := old.assistencias;
+    end if;
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists presencas_protege_estat on public.presencas;
+create trigger presencas_protege_estat
+  before insert or update on public.presencas
+  for each row execute function public.presencas_protege_estatisticas();
+
 -- Caixa do time: entradas e saídas avulsas (as mensalidades/jogos pagos entram automaticamente no extrato).
 create table if not exists public.caixa_lancamentos (
   id          uuid primary key default gen_random_uuid(),
@@ -1177,16 +1202,19 @@ $$;
 
 -- Admin: encerra a partida de uma vez só (atômico): marca quem faltou, registra o placar e marca como realizado.
 -- Com placar, o banco define o vencedor e a votação do craque abre automaticamente.
+drop function if exists public.encerrar_jogo(uuid, uuid[], uuid[], int, int);
 create or replace function public.encerrar_jogo(
   p_jogo_id uuid,
   p_faltosos uuid[] default '{}',
   p_convidados_faltosos uuid[] default '{}',
   p_placar_branco int default null,
-  p_placar_preto int default null
+  p_placar_preto int default null,
+  p_estatisticas jsonb default null   -- [{"jogador_id": "...", "gols": 2, "assistencias": 1}, ...]
 )
 returns void language plpgsql security definer set search_path = public as $$
 declare
   v uuid;
+  e jsonb;
 begin
   if not public.is_admin() then
     raise exception 'Apenas administradores podem encerrar o jogo';
@@ -1208,11 +1236,68 @@ begin
     end if;
   end loop;
 
+  -- gols e assistências de quem jogou (quem faltou fica zerado)
+  if p_estatisticas is not null then
+    for e in select * from jsonb_array_elements(p_estatisticas) loop
+      update public.presencas
+         set gols = greatest(0, least(50, coalesce((e->>'gols')::int, 0))),
+             assistencias = greatest(0, least(50, coalesce((e->>'assistencias')::int, 0)))
+       where jogo_id = p_jogo_id and jogador_id = (e->>'jogador_id')::uuid and status = 'confirmado';
+    end loop;
+  end if;
+  update public.presencas set gols = 0, assistencias = 0
+   where jogo_id = p_jogo_id and status <> 'confirmado' and (gols <> 0 or assistencias <> 0);
+
   update public.jogos
      set placar_branco = coalesce(p_placar_branco, placar_branco),
          placar_preto  = coalesce(p_placar_preto, placar_preto),
          status = case when status = 'agendado' then 'realizado' else status end
    where id = p_jogo_id;
+end;
+$$;
+
+-- Artilheiros e garçons (assistências) do ano: só jogos realizados, só quem jogou.
+create or replace function public.ranking_artilheiros(p_limite int default 5, p_ano int default null)
+returns table (jogador_id uuid, nome text, apelido text, total bigint, jogos bigint)
+language plpgsql stable security definer set search_path = public as $$
+declare
+  v_ano int := coalesce(p_ano, extract(year from now())::int);
+begin
+  if not public.is_membro() then
+    raise exception 'Acesso negado';
+  end if;
+  return query
+    select j.id, j.nome, j.apelido, sum(pr.gols)::bigint, count(*)::bigint
+      from public.presencas pr
+      join public.jogos g on g.id = pr.jogo_id and g.status = 'realizado' and extract(year from g.data)::int = v_ano
+      join public.jogadores j on j.id = pr.jogador_id
+     where pr.status = 'confirmado'
+     group by j.id, j.nome, j.apelido
+    having sum(pr.gols) > 0
+     order by sum(pr.gols) desc, count(*), j.nome
+     limit p_limite;
+end;
+$$;
+
+create or replace function public.ranking_assistentes(p_limite int default 5, p_ano int default null)
+returns table (jogador_id uuid, nome text, apelido text, total bigint, jogos bigint)
+language plpgsql stable security definer set search_path = public as $$
+declare
+  v_ano int := coalesce(p_ano, extract(year from now())::int);
+begin
+  if not public.is_membro() then
+    raise exception 'Acesso negado';
+  end if;
+  return query
+    select j.id, j.nome, j.apelido, sum(pr.assistencias)::bigint, count(*)::bigint
+      from public.presencas pr
+      join public.jogos g on g.id = pr.jogo_id and g.status = 'realizado' and extract(year from g.data)::int = v_ano
+      join public.jogadores j on j.id = pr.jogador_id
+     where pr.status = 'confirmado'
+     group by j.id, j.nome, j.apelido
+    having sum(pr.assistencias) > 0
+     order by sum(pr.assistencias) desc, count(*), j.nome
+     limit p_limite;
 end;
 $$;
 
@@ -1651,7 +1736,9 @@ revoke execute on function public._tirar_do_sorteio(uuid, text) from public, ano
 revoke execute on function public.promover_espera(uuid) from public, anon, authenticated;
 revoke execute on function public.vagas_ocupadas(uuid, uuid) from public, anon, authenticated;
 revoke execute on function public.remover_faltoso(uuid, uuid) from public, anon;
-revoke execute on function public.encerrar_jogo(uuid, uuid[], uuid[], int, int) from public, anon;
+revoke execute on function public.encerrar_jogo(uuid, uuid[], uuid[], int, int, jsonb) from public, anon;
+revoke execute on function public.ranking_artilheiros(int, int) from public, anon;
+revoke execute on function public.ranking_assistentes(int, int) from public, anon;
 revoke execute on function public.pagamentos_do_jogo(uuid) from public, anon;
 revoke execute on function public.remover_convidado(uuid) from public, anon;
 revoke execute on function public.caixa_extrato(int) from public, anon;
@@ -1675,7 +1762,9 @@ grant execute on function public.push_registrar(text, text, text, text) to authe
 grant execute on function public.push_teste() to authenticated;
 grant execute on function public.gerar_jogos_automaticos() to authenticated;
 grant execute on function public.remover_faltoso(uuid, uuid) to authenticated;
-grant execute on function public.encerrar_jogo(uuid, uuid[], uuid[], int, int) to authenticated;
+grant execute on function public.encerrar_jogo(uuid, uuid[], uuid[], int, int, jsonb) to authenticated;
+grant execute on function public.ranking_artilheiros(int, int) to authenticated;
+grant execute on function public.ranking_assistentes(int, int) to authenticated;
 grant execute on function public.pagamentos_do_jogo(uuid) to authenticated;
 grant execute on function public.remover_convidado(uuid) to authenticated;
 grant execute on function public.caixa_extrato(int) to authenticated;

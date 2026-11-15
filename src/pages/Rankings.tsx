@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { useJogadores, useRankingAssiduidade, useRankingCraques, useRankingGoleiros, useRankingVencedores } from '../lib/api'
+import { useJogadores, useRankingArtilheiros, useRankingAssiduidade, useRankingAssistentes, useRankingCraques, useRankingGoleiros, useRankingVencedores } from '../lib/api'
 import { exibir } from '../lib/format'
 import { Avatar, Erro, Spinner } from '../components/ui'
 
@@ -40,6 +40,8 @@ export default function Rankings() {
   const vencedores = useRankingVencedores(5)
   const assiduos = useRankingAssiduidade(5)
   const totalJogos = assiduos.data?.[0]?.total_jogos ?? 0
+  const artilheiros = useRankingArtilheiros(5)
+  const assistentes = useRankingAssistentes(5)
   const goleiros = useRankingGoleiros(5)
   const g0 = goleiros.data?.[0]
   return (
@@ -68,6 +70,22 @@ export default function Rankings() {
         linhas={assiduos.data?.map((r) => ({ ...r, valor: r.presencas }))}
         carregando={assiduos.isLoading}
         erro={assiduos.error}
+      />
+      <Top
+        titulo={`⚽ Artilheiros de ${ANO}`}
+        vazio="Aparece quando o admin registrar os gols ao encerrar um jogo."
+        rotulo={(n) => `${n} ${n === 1 ? 'gol' : 'gols'}`}
+        linhas={artilheiros.data?.map((r) => ({ ...r, valor: r.total, detalhe: `${r.jogos} ${r.jogos === 1 ? 'jogo' : 'jogos'}` }))}
+        carregando={artilheiros.isLoading}
+        erro={artilheiros.error}
+      />
+      <Top
+        titulo={`🍽️ Garçons de ${ANO} (assistências)`}
+        vazio="Aparece quando o admin registrar as assistências ao encerrar um jogo."
+        rotulo={(n) => `${n} ${n === 1 ? 'assistência' : 'assistências'}`}
+        linhas={assistentes.data?.map((r) => ({ ...r, valor: r.total, detalhe: `${r.jogos} ${r.jogos === 1 ? 'jogo' : 'jogos'}` }))}
+        carregando={assistentes.isLoading}
+        erro={assistentes.error}
       />
       <Top
         titulo={`🧤 Goleiros menos vazados de ${ANO}`}

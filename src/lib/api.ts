@@ -5,7 +5,7 @@ import { hojeISO, somaDias } from './format'
 import { gerarCobrancas, type ConvidadoJogou, type Jogou } from './financeiro'
 import type {
   AvisoAvulso, ConfigTime, PushPreferencias, Convidado, ExtratoItem, FuncaoGoleiro, Jogador, Jogo, Lancamento, Pagamento, Pelada, Presenca, RankingAssiduo,
-  RankingCraque, RankingGoleiro, RankingVencedor, ResultadoVotacao, ResumoCaixa, StatusPresenca, TipoPagamento, Voto,
+  RankingCraque, RankingEstatistica, RankingGoleiro, RankingVencedor, ResultadoVotacao, ResumoCaixa, StatusPresenca, TipoPagamento, Voto,
 } from './types'
 
 function ok<T>(r: { data: T; error: { message: string } | null }): T {
@@ -322,6 +322,16 @@ export const useRankingAssiduidade = (limite = 5) =>
       ok(await supabase.rpc('ranking_assiduidade', { p_limite: limite })) as RankingAssiduo[],
   })
 
+/** Artilheiros e assistentes do ano (gols/assistências registrados ao encerrar cada jogo). */
+const rankingEstatistica = (rpc: 'ranking_artilheiros' | 'ranking_assistentes', limite: number) => async () =>
+  (ok(await supabase.rpc(rpc, { p_limite: limite })) as RankingEstatistica[]).map((r) => ({ ...r, total: Number(r.total), jogos: Number(r.jogos) }))
+
+export const useRankingArtilheiros = (limite = 5) =>
+  useQuery({ queryKey: ['ranking', 'artilheiros', limite], queryFn: rankingEstatistica('ranking_artilheiros', limite) })
+
+export const useRankingAssistentes = (limite = 5) =>
+  useQuery({ queryKey: ['ranking', 'assistentes', limite], queryFn: rankingEstatistica('ranking_assistentes', limite) })
+
 /** Goleiros menos vazados do ano (média de gols sofridos por jogo; mínimo de 30% dos jogos). */
 export const useRankingGoleiros = (limite = 5) =>
   useQuery({
@@ -488,7 +498,7 @@ export const useMeusVotos = (eleitorId: string | undefined, jogoIds: string[]) =
 /** Admin: encerra a partida de uma vez (faltosos + placar). A votação do craque abre sozinha. */
 export const useEncerrarJogo = () =>
   useAcao(
-    async (v: { jogoId: string; faltosos: string[]; convidadosFaltosos: string[]; placarBranco: number | null; placarPreto: number | null }) =>
+    async (v: { jogoId: string; faltosos: string[]; convidadosFaltosos: string[]; placarBranco: number | null; placarPreto: number | null; estatisticas?: { jogador_id: string; gols: number; assistencias: number }[] }) =>
       ok(
         await supabase.rpc('encerrar_jogo', {
           p_jogo_id: v.jogoId,
@@ -496,6 +506,7 @@ export const useEncerrarJogo = () =>
           p_convidados_faltosos: v.convidadosFaltosos,
           p_placar_branco: v.placarBranco,
           p_placar_preto: v.placarPreto,
+          p_estatisticas: v.estatisticas ?? null,
         }),
       ),
     [['jogos'], ['jogo'], ['presencas'], ['convidados'], ['voto'], ['totalVotos'], ['resultado'], ['cobrancas'], ['ranking'], ['jogosNoAno'], ['pagosJogo'], ['caixa']],

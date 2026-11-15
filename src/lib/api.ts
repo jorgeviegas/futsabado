@@ -76,7 +76,7 @@ export const useGerarJogos = () =>
   )
 
 // ---------- Jogos ----------
-const JOGO_SELECT = '*, peladas(nome, limite_jogadores, valor_avulso, latitude, longitude, cidade)'
+const JOGO_SELECT = '*, peladas(nome, limite_jogadores, valor_avulso, latitude, longitude, cidade, goleiros_isentos)'
 
 /** Próximo jogo (o mais próximo ainda por acontecer). */
 export const useProximoJogo = () =>
@@ -323,7 +323,7 @@ export const useMarcarPagamento = () =>
     [['cobrancas'], ['caixa']],
   )
 
-const JOGO_REF = 'jogos!inner(id, data, valor, status, peladas(nome, valor_avulso))'
+const JOGO_REF = 'jogos!inner(id, data, valor, status, sorteio, peladas(nome, valor_avulso, goleiros_isentos))'
 
 /**
  * Cobranças do ano. Sem `jogadorId` (admin): de todos. Com `jogadorId`: só as dele
@@ -335,8 +335,8 @@ export const useCobrancas = (jogadorId?: string) => {
   const { data: base, isLoading: l3, error } = useQuery({
     queryKey: ['cobrancas', jogadorId ?? 'todos'],
     queryFn: async () => {
-      let jogaram = supabase.from('presencas').select(`jogador_id, ${JOGO_REF}`).eq('status', 'confirmado').eq('jogos.status', 'realizado')
-      let convidados = supabase.from('convidados').select(`id, nome, convidado_por, ${JOGO_REF}`).eq('jogos.status', 'realizado')
+      let jogaram = supabase.from('presencas').select(`jogador_id, funcao, ${JOGO_REF}`).eq('status', 'confirmado').eq('jogos.status', 'realizado')
+      let convidados = supabase.from('convidados').select(`id, nome, convidado_por, posicao, ${JOGO_REF}`).eq('jogos.status', 'realizado')
       let pagamentos = supabase.from('pagamentos').select('*')
       if (jogadorId) {
         jogaram = jogaram.eq('jogador_id', jogadorId)

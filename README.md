@@ -88,6 +88,11 @@ Abra a URL no celular → Chrome: **Instalar app / Adicionar à tela inicial** �
   votação e do ranking de assiduidade. O admin encerra a votação para revelar o craque.
 - **Convidados:** qualquer jogador convida um avulso (nome e posição opcional) enquanto o jogo está agendado. O
   convidado ocupa vaga, entra no sorteio e paga o mesmo valor; quem convidou fica responsável pelo pagamento.
+- **Lista de espera:** com o jogo cheio, quem toca em "Vou" entra na lista de espera (botão âmbar, com a posição na
+  fila). Se alguém deixar de confirmar, o primeiro da fila entra sozinho — feito no banco, então vale também para
+  convidado removido, jogador marcado como "faltou" e aumento do limite de jogadores. Admins podem ultrapassar o limite.
+- **Goleiros isentos:** opção na pelada. Quem jogou no gol não paga aquele jogo (vale a vaga de goleiro do sorteio; sem
+  sorteio, vale o goleiro de posição que não avisou que jogaria na linha). Só afeta cobranças por jogo (avulsos e convidados).
 - **Financeiro:** todos veem o *Caixa do time* (saldo, entradas e saídas) em somente leitura e as próprias pendências.
   Admins têm ainda *Cobranças* (confirmar/desfazer pagamentos de todos, de qualquer mês do ano) e *Lançar* (entradas e
   saídas avulsas). Pagamentos confirmados entram no caixa automaticamente.

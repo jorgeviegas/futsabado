@@ -189,6 +189,14 @@ alter table public.peladas add constraint peladas_coord_check
   check ((latitude is null) = (longitude is null)
          and (latitude is null or (latitude between -90 and 90 and longitude between -180 and 180)));
 
+-- v7: goleiros isentos de pagamento e lista de espera
+alter table public.peladas add column if not exists goleiros_isentos boolean not null default false;
+
+alter table public.presencas add column if not exists espera_desde timestamptz;
+alter table public.presencas drop constraint if exists presencas_status_check;
+alter table public.presencas add constraint presencas_status_check
+  check (status in ('confirmado','talvez','ausente','faltou','espera'));
+
 -- Caixa do time: entradas e saídas avulsas (as mensalidades/jogos pagos entram automaticamente no extrato).
 create table if not exists public.caixa_lancamentos (
   id          uuid primary key default gen_random_uuid(),
@@ -343,6 +351,171 @@ drop trigger if exists jogos_resultado on public.jogos;
 create trigger jogos_resultado
   before insert or update on public.jogos
   for each row execute function public.jogos_resultado();
+
+-- ---------------------------------------------------------------------
+-- LISTA DE ESPERA
+--  * jogo cheio: quem confirma entra na lista de espera (status 'espera', com a hora de entrada);
+--  * vaga liberada (alguém deixa de confirmar, convidado removido ou limite aumentado):
+--    o primeiro da lista entra sozinho.
+-- ---------------------------------------------------------------------
+
+-- Vagas ocupadas = jogadores confirmados + convidados.
+create or replace function public.vagas_ocupadas(p_jogo_id uuid, p_exceto_jogador uuid default null)
+returns int language sql stable security definer set search_path = public as $$
+  select (select count(*) from public.presencas x
+           where x.jogo_id = p_jogo_id and x.status = 'confirmado'
+             and (p_exceto_jogador is null or x.jogador_id <> p_exceto_jogador))::int
+       + (select count(*) from public.convidados c where c.jogo_id = p_jogo_id)::int;
+$$;
+
+-- Promove, na ordem de chegada, quem está na lista de espera enquanto houver vaga.
+create or replace function public.promover_espera(p_jogo_id uuid)
+returns int language plpgsql security definer set search_path = public as $$
+declare
+  v_limite int;
+  v_prox uuid;
+  v_n int := 0;
+begin
+  select p.limite_jogadores into v_limite
+    from public.jogos j join public.peladas p on p.id = j.pelada_id
+   where j.id = p_jogo_id and j.status = 'agendado';
+  if not found then
+    return 0;
+  end if;
+
+  loop
+    exit when v_limite is not null and public.vagas_ocupadas(p_jogo_id) >= v_limite;
+    select x.jogador_id into v_prox from public.presencas x
+     where x.jogo_id = p_jogo_id and x.status = 'espera'
+     order by x.espera_desde, x.jogador_id limit 1;
+    exit when v_prox is null;
+    update public.presencas set status = 'confirmado' where jogo_id = p_jogo_id and jogador_id = v_prox;
+    v_n := v_n + 1;
+    v_prox := null;
+  end loop;
+  return v_n;
+end;
+$$;
+
+-- Antes de gravar a presença: jogo cheio => vira lista de espera (admins podem ultrapassar o limite).
+create or replace function public.presenca_vaga()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  v_limite int;
+begin
+  if new.status = 'confirmado' and (tg_op = 'INSERT' or old.status <> 'confirmado') and not public.is_admin()
+     and not exists (select 1 from public.presencas x
+                      where x.jogo_id = new.jogo_id and x.jogador_id = new.jogador_id and x.status = 'confirmado') then
+    select p.limite_jogadores into v_limite
+      from public.jogos j join public.peladas p on p.id = j.pelada_id
+     where j.id = new.jogo_id;
+    if v_limite is not null and public.vagas_ocupadas(new.jogo_id, new.jogador_id) >= v_limite then
+      new.status := 'espera';
+    end if;
+  end if;
+
+  if new.status = 'espera' then
+    if tg_op = 'INSERT' or old.status <> 'espera' then
+      new.espera_desde := now();   -- mantém a posição se continuar na lista
+    end if;
+  else
+    new.espera_desde := null;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists presencas_vaga on public.presencas;
+create trigger presencas_vaga
+  before insert or update on public.presencas
+  for each row execute function public.presenca_vaga();
+
+-- Depois: se alguém deixou de estar confirmado (ou entrou na espera com vaga livre), chama o próximo da fila.
+create or replace function public.presenca_liberou_vaga()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op = 'DELETE' then
+    if old.status = 'confirmado' then
+      perform public.promover_espera(old.jogo_id);
+    end if;
+  elsif (old.status = 'confirmado' and new.status <> 'confirmado') or (new.status = 'espera' and old.status is distinct from 'espera') then
+    perform public.promover_espera(new.jogo_id);
+  end if;
+  return null;
+end;
+$$;
+
+drop trigger if exists presencas_liberou_vaga on public.presencas;
+create trigger presencas_liberou_vaga
+  after update or delete on public.presencas
+  for each row execute function public.presenca_liberou_vaga();
+
+-- insert direto na espera com vaga livre (corrida): promove
+create or replace function public.presenca_nova_espera()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if new.status = 'espera' then
+    perform public.promover_espera(new.jogo_id);
+  end if;
+  return null;
+end;
+$$;
+
+drop trigger if exists presencas_nova_espera on public.presencas;
+create trigger presencas_nova_espera
+  after insert on public.presencas
+  for each row execute function public.presenca_nova_espera();
+
+-- Convidado removido libera vaga; convidado novo não pode ultrapassar o limite (exceto admin).
+create or replace function public.convidado_vaga()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  v_limite int;
+begin
+  if tg_op = 'DELETE' then
+    perform public.promover_espera(old.jogo_id);
+    return null;
+  end if;
+  if not public.is_admin() then
+    select p.limite_jogadores into v_limite
+      from public.jogos j join public.peladas p on p.id = j.pelada_id
+     where j.id = new.jogo_id;
+    if v_limite is not null and public.vagas_ocupadas(new.jogo_id) >= v_limite then
+      raise exception 'A lista está cheia. Entre na lista de espera.';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists convidados_vaga_ins on public.convidados;
+create trigger convidados_vaga_ins
+  before insert on public.convidados
+  for each row execute function public.convidado_vaga();
+drop trigger if exists convidados_vaga_del on public.convidados;
+create trigger convidados_vaga_del
+  after delete on public.convidados
+  for each row execute function public.convidado_vaga();
+
+-- Limite de jogadores aumentado: a lista de espera avança nos jogos agendados da pelada.
+create or replace function public.pelada_limite_mudou()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  v_jogo uuid;
+begin
+  if new.limite_jogadores is distinct from old.limite_jogadores then
+    for v_jogo in select id from public.jogos where pelada_id = new.id and status = 'agendado' loop
+      perform public.promover_espera(v_jogo);
+    end loop;
+  end if;
+  return null;
+end;
+$$;
+
+drop trigger if exists peladas_limite_mudou on public.peladas;
+create trigger peladas_limite_mudou
+  after update on public.peladas
+  for each row execute function public.pelada_limite_mudou();
 
 -- ---------------------------------------------------------------------
 -- ROW LEVEL SECURITY
@@ -822,6 +995,8 @@ revoke execute on function public.jogos_no_ano(int) from public, anon;
 revoke execute on function public.marcar_pagamento(uuid, text, date, uuid, numeric, boolean, uuid) from public, anon;
 revoke execute on function public.processar_jogos() from public, anon;
 revoke execute on function public._tirar_do_sorteio(uuid, text) from public, anon, authenticated;
+revoke execute on function public.promover_espera(uuid) from public, anon, authenticated;
+revoke execute on function public.vagas_ocupadas(uuid, uuid) from public, anon, authenticated;
 revoke execute on function public.remover_faltoso(uuid, uuid) from public, anon;
 revoke execute on function public.remover_convidado(uuid) from public, anon;
 revoke execute on function public.caixa_extrato(int) from public, anon;

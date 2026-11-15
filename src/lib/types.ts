@@ -1,7 +1,7 @@
 export type Posicao = 'goleiro' | 'zagueiro' | 'ala' | 'meia' | 'atacante'
 export type TipoJogador = 'mensalista' | 'avulso'
 /** 'faltou' = confirmou, mas não compareceu (marcado pelo admin). */
-export type StatusPresenca = 'confirmado' | 'talvez' | 'ausente' | 'faltou'
+export type StatusPresenca = 'confirmado' | 'talvez' | 'ausente' | 'faltou' | 'espera'
 export type StatusJogo = 'agendado' | 'realizado' | 'cancelado'
 
 export interface Jogador {
@@ -36,6 +36,8 @@ export interface Pelada {
   latitude: number | null
   longitude: number | null
   cidade: string | null
+  /** Goleiros não pagam o jogo em que jogaram no gol. */
+  goleiros_isentos: boolean
   ativa: boolean
 }
 
@@ -73,7 +75,7 @@ export interface Jogo {
   sorteio: Sorteio | null
   time_vencedor: TimeCor | 'empate' | null
   observacoes: string | null
-  peladas?: Pick<Pelada, 'nome' | 'limite_jogadores' | 'valor_avulso' | 'latitude' | 'longitude' | 'cidade'> | null
+  peladas?: Pick<Pelada, 'nome' | 'limite_jogadores' | 'valor_avulso' | 'latitude' | 'longitude' | 'cidade' | 'goleiros_isentos'> | null
 }
 
 /** Goleiro com posição secundária escolhe se joga no gol ou na linha. */
@@ -84,6 +86,8 @@ export interface Presenca {
   jogador_id: string
   status: StatusPresenca
   funcao: FuncaoGoleiro | null
+  /** Quando entrou na lista de espera (define a ordem da fila). */
+  espera_desde: string | null
 }
 
 export interface Voto {

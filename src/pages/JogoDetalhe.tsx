@@ -60,7 +60,16 @@ export default function JogoDetalhe() {
   const ausentes = jogadores.filter((j) => pres.some((p) => p.jogador_id === j.id && p.status === 'ausente'))
   const limite = jogo.peladas?.limite_jogadores
   const cheio = Boolean(limite && participantes.length >= limite)
-  const lotado = cheio && minha !== 'confirmado'
+  const naFila = minha === 'espera'
+  const euConfirmado = minha === 'confirmado'
+  // lista de espera, na ordem de chegada
+  const fila = pres
+    .filter((p) => p.status === 'espera')
+    .sort((a, b) => (a.espera_desde ?? '').localeCompare(b.espera_desde ?? '') || a.jogador_id.localeCompare(b.jogador_id))
+  const posicaoNaFila = fila.findIndex((p) => p.jogador_id === eu?.id) + 1
+  const esperando = fila.map((p) => jogadores.find((j) => j.id === p.jogador_id)).filter(Boolean) as Jogador[]
+  // jogo cheio e eu fora da lista de confirmados: o botão vira "lista de espera"
+  const vaiParaFila = cheio && !euConfirmado
   const agendado = jogo.status === 'agendado'
 
   function sortearTimes() {
@@ -90,7 +99,7 @@ export default function JogoDetalhe() {
           {formatarData(jogo.data)} às {formatarHora(jogo.horario)}{jogo.local && ` · ${jogo.local}`}
         </div>
         <ClimaJogo jogo={jogo} grande />
-        {jogo.valor != null && <div className="muted">💵 {moeda(jogo.valor)} por jogador</div>}
+        {jogo.valor != null && <div className="muted">💵 {moeda(jogo.valor)} por jogador{jogo.peladas?.goleiros_isentos ? ' · goleiros isentos 🧤' : ''}</div>}
         {placarTexto(jogo) && <div style={{ fontSize: '1.15rem' }}><strong>{placarTexto(jogo)}</strong></div>}
         {jogo.time_vencedor && <div className="muted">{jogo.time_vencedor === 'empate' ? 'Empate' : `Vitória do ${NOME_TIME[jogo.time_vencedor]}`}</div>}
         {jogo.status === 'realizado' && !placarTexto(jogo) && <div className="muted">Placar ainda não registrado.</div>}
@@ -109,24 +118,35 @@ export default function JogoDetalhe() {
           <h2>Você vai?</h2>
           {isAdmin && !confirmacaoLiberada(liberaEm) && <p className="muted">Ainda não aberta para os jogadores (abre em {formatarData(liberaEm!)}); você, como admin, pode confirmar.</p>}
           <div className="presenca">
-            {OPCOES.map((o) => (
-              <button
-                key={o.v}
-                type="button"
-                aria-pressed={minha === o.v}
-                className={`btn-presenca ${o.cls} ${minha === o.v ? 'ativo' : ''}`}
-                disabled={definir.isPending || (o.v === 'confirmado' && lotado)}
-                onClick={() => {
-                  if (o.v === 'confirmado' && precisaFuncao && minha !== 'confirmado') return setEscolhendoFuncao(true)
-                  setEscolhendoFuncao(false)
-                  definir.mutate({ jogoId: jogo.id, jogadorId: eu.id, status: minha === o.v ? null : o.v })
-                }}
-              >
-                {o.rot}
-              </button>
-            ))}
+            {OPCOES.map((o) => {
+              const ehVou = o.v === 'confirmado'
+              const ativo = ehVou ? euConfirmado || naFila : minha === o.v
+              return (
+                <button
+                  key={o.v}
+                  type="button"
+                  aria-pressed={ativo}
+                  className={`btn-presenca ${ehVou && (naFila || (vaiParaFila && !euConfirmado)) ? 'espera' : o.cls} ${ativo ? 'ativo' : ''}`}
+                  disabled={definir.isPending}
+                  onClick={() => {
+                    if (ehVou && precisaFuncao && !euConfirmado && !naFila) return setEscolhendoFuncao(true)
+                    setEscolhendoFuncao(false)
+                    // sair da lista/da presença: grava vazio; entrar: o banco decide se confirma ou manda para a espera
+                    definir.mutate({ jogoId: jogo.id, jogadorId: eu.id, status: ativo ? null : o.v })
+                  }}
+                >
+                  {ehVou ? (naFila ? '⏳ Na lista de espera' : vaiParaFila ? '⏳ Lista de espera' : o.rot) : o.rot}
+                </button>
+              )
+            })}
           </div>
-          {precisaFuncao && (escolhendoFuncao || minha === 'confirmado') && (
+          {naFila && (
+            <p className="muted">
+              Você está em <strong>{posicaoNaFila}º</strong> na lista de espera. Se alguém cancelar, você entra automaticamente.
+              Toque de novo para sair da fila.
+            </p>
+          )}
+          {precisaFuncao && (escolhendoFuncao || euConfirmado || naFila) && (
             <div className="form" style={{ borderTop: '1px solid var(--borda)', paddingTop: '.7rem' }}>
               <strong>🧤 Você é goleiro. Onde vai jogar neste jogo?</strong>
               <div className="seg">
@@ -134,8 +154,8 @@ export default function JogoDetalhe() {
                   <button
                     key={f}
                     type="button"
-                    className={minha === 'confirmado' && (minhaPres?.funcao ?? 'gol') === f ? 'ativo ok' : ''}
-                    disabled={definir.isPending || lotado}
+                    className={(euConfirmado || naFila) && (minhaPres?.funcao ?? 'gol') === f ? 'ativo ok' : ''}
+                    disabled={definir.isPending}
                     onClick={() => {
                       setEscolhendoFuncao(false)
                       definir.mutate({ jogoId: jogo.id, jogadorId: eu.id, status: 'confirmado', funcao: f })
@@ -145,10 +165,10 @@ export default function JogoDetalhe() {
                   </button>
                 ))}
               </div>
-              {minha !== 'confirmado' && <span className="muted">Escolha uma opção para confirmar sua presença.</span>}
+              {!euConfirmado && !naFila && <span className="muted">Escolha uma opção para confirmar sua presença.</span>}
             </div>
           )}
-          {lotado && <p className="muted">Lista cheia ({limite} jogadores). Fale com um admin.</p>}
+          {vaiParaFila && !naFila && <p className="muted">Jogo cheio ({limite} jogadores). Quem entrar agora fica na lista de espera e é chamado se alguém cancelar.</p>}
           <Erro erro={definir.error} />
         </div>
       )}
@@ -163,6 +183,9 @@ export default function JogoDetalhe() {
         convidadoDe={donoDoConvidado}
         funcoes={Object.fromEntries(pres.filter((p) => p.funcao).map((p) => [p.jogador_id, p.funcao!]))}
       />
+      {esperando.length > 0 && (
+        <Lista titulo={`⏳ Lista de espera (${esperando.length})`} lista={esperando} ordem funcoes={Object.fromEntries(pres.filter((p) => p.funcao).map((p) => [p.jogador_id, p.funcao!]))} />
+      )}
       {ausentes.length > 0 && <Lista titulo={`Não vão (${ausentes.length})`} lista={ausentes} />}
 
       {jogo.sorteio && <Times jogo={jogo} jogadores={todos} jogosAno={jogosAno} />}
@@ -225,20 +248,23 @@ export default function JogoDetalhe() {
   )
 }
 
-function Lista({ titulo, lista, funcoes = {}, convidadoDe = {} }: {
-  titulo: string; lista: Jogador[]; funcoes?: Record<string, FuncaoGoleiro>; convidadoDe?: Record<string, string>
+function Lista({ titulo, lista, funcoes = {}, convidadoDe = {}, ordem = false }: {
+  titulo: string; lista: Jogador[]; funcoes?: Record<string, FuncaoGoleiro>; convidadoDe?: Record<string, string>; ordem?: boolean
 }) {
   return (
     <div className="card">
       <h3>{titulo}</h3>
       {lista.length === 0 && <span className="muted">Ninguém ainda.</span>}
-      {lista.map((j) => (
+      {lista.map((j, i) => (
         <div className="linha" key={j.id}>
+          {ordem && <strong className="pos-tag">{i + 1}º</strong>}
           <Avatar nome={exibir(j)} numero={j.numero_camisa} />
-          <span className="grow">{exibir(j)}</span>
+          <span className="grow">
+            {exibir(j)}
+            {j.posicao === 'goleiro' && funcoes[j.id] !== 'linha' && <span role="img" aria-label="Goleiro" title="Goleiro"> 🧤</span>}
+          </span>
           {convidadoDe[j.id] && <span className="chip aviso">convidado de {convidadoDe[j.id]}</span>}
           {funcoes[j.id] === 'linha' && <span className="chip aviso">joga na linha</span>}
-          {funcoes[j.id] === 'gol' && <span className="chip">🧤 gol</span>}
           {j.tipo === 'avulso' && !convidadoDe[j.id] && <span className="chip">avulso</span>}
         </div>
       ))}

@@ -25,7 +25,7 @@ function Jogador_({ e, j, cor, baixo }: { e: Escalado; j?: Jogador; cor: 'branco
   const rotulo = j?.numero_camisa != null ? String(j.numero_camisa) : nome.trim().slice(0, 2).toUpperCase()
   return (
     <g>
-      <circle cx={x} cy={y} r="6.2" fill={`url(#uniforme-${cor})`} stroke={e.fora ? '#e0a526' : '#fff'} strokeWidth="0.9" strokeDasharray={e.fora ? '1.6 1' : undefined} />
+      <circle cx={x} cy={y} r="6.2" fill={`url(#uniforme-${cor})`} stroke={e.fora ? '#e0a526' : cor === 'preto' ? '#000' : '#fff'} strokeWidth="0.9" strokeDasharray={e.fora ? '1.6 1' : undefined} />
       <text
         x={x} y={y + 1.9} textAnchor="middle" fontSize="5.2" fontWeight="800"
         fill={cor === 'preto' ? '#fff' : '#3a0a14'} stroke={cor === 'preto' ? '#000' : '#f4f0e6'} strokeWidth="0.7" paintOrder="stroke"

@@ -31,7 +31,7 @@ export default function Peladas() {
           <div className="muted">
             Toda {DIAS[p.dia_semana].toLowerCase()} às {formatarHora(p.horario)}{p.local && ` · ${p.local}`}
             <br />
-            {p.limite_jogadores ? `Limite ${p.limite_jogadores} · ` : ''}Mensalidade {moeda(p.valor_mensalidade)} · {moeda(p.valor_avulso)} por jogo
+            {p.limite_jogadores ? `Limite ${p.limite_jogadores} · ` : ''}{p.goleiros_isentos ? 'Goleiros isentos · ' : ''}Mensalidade {moeda(p.valor_mensalidade)} · {moeda(p.valor_avulso)} por jogo
           </div>
           <div className="linha wrap">
             <button
@@ -67,6 +67,7 @@ function Form({ inicial, onFechar }: { inicial: Partial<Pelada>; onFechar: () =>
     valor_mensalidade: String(inicial.valor_mensalidade ?? 0),
     valor_avulso: String(inicial.valor_avulso ?? 0),
     liberar: String(inicial.liberar_confirmacao_dias ?? 2),
+    goleirosIsentos: inicial.goleiros_isentos ?? false,
     latitude: inicial.latitude ?? null,
     longitude: inicial.longitude ?? null,
     cidade: inicial.cidade ?? '',
@@ -84,6 +85,7 @@ function Form({ inicial, onFechar }: { inicial: Partial<Pelada>; onFechar: () =>
               local: f.local.trim() || null, limite_jogadores: f.limite_jogadores ? Number(f.limite_jogadores) : null,
               valor_mensalidade: Number(f.valor_mensalidade) || 0, valor_avulso: Number(f.valor_avulso) || 0, ativa: f.ativa,
               liberar_confirmacao_dias: Math.min(6, Math.max(0, Number(f.liberar) || 0)),
+              goleiros_isentos: f.goleirosIsentos,
               latitude: f.latitude, longitude: f.longitude, cidade: f.latitude == null ? null : f.cidade || null,
             },
             { onSuccess: onFechar },
@@ -114,6 +116,10 @@ function Form({ inicial, onFechar }: { inicial: Partial<Pelada>; onFechar: () =>
         <label>Liberar a confirmação de presença (dias após o jogo anterior)
           <input type="number" min={0} max={6} value={f.liberar} onChange={(e) => setF({ ...f, liberar: e.target.value })} />
           <span className="muted">Ex.: 2 = segunda-feira para jogos de sábado; 1 = domingo. Admins confirmam a qualquer momento.</span>
+        </label>
+        <label className="linha">
+          <input type="checkbox" style={{ width: 'auto' }} checked={f.goleirosIsentos} onChange={(e) => setF({ ...f, goleirosIsentos: e.target.checked })} />
+          <span>🧤 Goleiros isentos: quem jogou no gol não paga o jogo</span>
         </label>
         <label className="linha"><input type="checkbox" style={{ width: 'auto' }} checked={f.ativa} onChange={(e) => setF({ ...f, ativa: e.target.checked })} /> Ativa</label>
         <Erro erro={salvar.error ?? excluir.error} />

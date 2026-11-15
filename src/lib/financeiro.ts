@@ -1,16 +1,18 @@
 import { exibir, formatarData, nomeMes, primeiroDiaMes, somaMeses } from './format'
-import type { Jogador, Pagamento, TipoPagamento } from './types'
+import type { FuncaoGoleiro, Jogador, Pagamento, Posicao, Sorteio, TipoPagamento } from './types'
 
 interface JogoRef {
   id: string
   data: string
   valor: number | null
-  peladas: { nome: string; valor_avulso: number } | null
+  sorteio?: Sorteio | null
+  peladas: { nome: string; valor_avulso: number; goleiros_isentos?: boolean } | null
 }
 
 /** Presença confirmada em jogo realizado (quem jogou). */
 export interface Jogou {
   jogador_id: string
+  funcao?: FuncaoGoleiro | null
   jogos: JogoRef
 }
 
@@ -19,6 +21,7 @@ export interface ConvidadoJogou {
   id: string
   nome: string
   convidado_por: string
+  posicao?: Posicao | null
   jogos: JogoRef
 }
 
@@ -38,6 +41,18 @@ export interface Cobranca {
 }
 
 const valorDoJogo = (j: JogoRef) => Number(j.valor ?? j.peladas?.valor_avulso ?? 0)
+
+/**
+ * Pelada com "goleiros isentos": quem jogou no gol não paga aquele jogo.
+ * Com sorteio salvo, vale quem ficou na vaga de goleiro (GOL); sem sorteio, vale o goleiro de posição
+ * (que não avisou que jogaria na linha).
+ */
+function isentoPorGol(jogo: JogoRef, id: string, goleiroPorPosicao: boolean): boolean {
+  if (!jogo.peladas?.goleiros_isentos) return false
+  const s = jogo.sorteio
+  if (s) return [...s.branco, ...s.preto].some((e) => e.id === id && e.slot === 'GOL')
+  return goleiroPorPosicao
+}
 
 /**
  * Todas as cobranças do ano corrente:
@@ -76,6 +91,7 @@ export function gerarCobrancas(a: {
     } else {
       for (const p of a.jogaram.filter((x) => x.jogador_id === j.id)) {
         const pg = a.pagamentos.find((x) => x.tipo === 'avulso' && x.jogador_id === j.id && x.jogo_id === p.jogos.id)
+        if (!pg?.pago && isentoPorGol(p.jogos, j.id, j.posicao === 'goleiro' && p.funcao !== 'linha')) continue
         lista.push({
           chave: `a-${j.id}-${p.jogos.id}`, jogadorId: j.id, jogadorNome: nome, tipo: 'avulso',
           competencia: primeiroDiaMes(new Date(`${p.jogos.data}T12:00:00`)), jogoId: p.jogos.id, convidadoId: null,
@@ -90,6 +106,7 @@ export function gerarCobrancas(a: {
     const dono = porId.get(c.convidado_por)
     if (!dono) continue
     const pg = a.pagamentos.find((x) => x.tipo === 'convidado' && x.convidado_id === c.id)
+    if (!pg?.pago && isentoPorGol(c.jogos, `c_${c.id}`, c.posicao === 'goleiro')) continue
     lista.push({
       chave: `c-${c.id}`, jogadorId: dono.id, jogadorNome: exibir(dono), tipo: 'convidado',
       competencia: primeiroDiaMes(new Date(`${c.jogos.data}T12:00:00`)), jogoId: c.jogos.id, convidadoId: c.id,

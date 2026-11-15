@@ -189,3 +189,6 @@ select { background-image: linear-gradient(45deg, transparent 50%, var(--texto-2
 .btn-presenca.ok.ativo { background: var(--ok); color: #05200f; box-shadow: 0 0 0 3px #3fb26b44; }
 .btn-presenca.erro.ativo { background: var(--erro); color: #fff; box-shadow: 0 0 0 3px #e5484d44; }
 .btn-presenca:disabled { opacity: .45; cursor: not-allowed; }
+
+.btn-presenca.espera { color: var(--aviso); border-color: var(--aviso); background: #2c2410; }
+.btn-presenca.espera.ativo { background: var(--aviso); color: #231a02; box-shadow: 0 0 0 3px #e0a52644; }

@@ -173,3 +173,17 @@ export interface RankingAssiduo {
   presencas: number
   total_jogos: number
 }
+
+export interface RankingGoleiro {
+  jogador_id: string
+  nome: string
+  apelido: string | null
+  jogos: number
+  gols_sofridos: number
+  /** Média simples de gols sofridos por jogo. */
+  media: number
+  /** Média ajustada (peso para quem jogou mais): define a ordem. */
+  media_ajustada: number
+  total_jogos: number
+  minimo_jogos: number
+}

@@ -5,7 +5,7 @@ import { hojeISO, somaDias } from './format'
 import { gerarCobrancas, type ConvidadoJogou, type Jogou } from './financeiro'
 import type {
   Convidado, ExtratoItem, FuncaoGoleiro, Jogador, Jogo, Lancamento, Pagamento, Pelada, Presenca, RankingAssiduo,
-  RankingCraque, RankingVencedor, ResultadoVotacao, ResumoCaixa, StatusPresenca, TipoPagamento, Voto,
+  RankingCraque, RankingGoleiro, RankingVencedor, ResultadoVotacao, ResumoCaixa, StatusPresenca, TipoPagamento, Voto,
 } from './types'
 
 function ok<T>(r: { data: T; error: { message: string } | null }): T {
@@ -285,6 +285,20 @@ export const useRankingAssiduidade = (limite = 5) =>
     queryKey: ['ranking', 'assiduidade', limite],
     queryFn: async () =>
       ok(await supabase.rpc('ranking_assiduidade', { p_limite: limite })) as RankingAssiduo[],
+  })
+
+/** Goleiros menos vazados do ano (média de gols sofridos por jogo; mínimo de 30% dos jogos). */
+export const useRankingGoleiros = (limite = 5) =>
+  useQuery({
+    queryKey: ['ranking', 'goleiros', limite],
+    queryFn: async () => {
+      const rows = ok(await supabase.rpc('ranking_goleiros', { p_limite: limite })) as RankingGoleiro[]
+      return rows.map((r) => ({
+        ...r,
+        jogos: Number(r.jogos), gols_sofridos: Number(r.gols_sofridos), media: Number(r.media),
+        media_ajustada: Number(r.media_ajustada), total_jogos: Number(r.total_jogos), minimo_jogos: Number(r.minimo_jogos),
+      }))
+    },
   })
 
 /** Jogos realizados no ano em que cada jogador esteve presente (desempate do sorteio). */

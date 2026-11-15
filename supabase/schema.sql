@@ -1054,6 +1054,74 @@ begin
 end;
 $$;
 
+-- Goleiros menos vazados: média de gols sofridos por jogo, no ano.
+--  * gols sofridos = placar do time adversário nos jogos em que o jogador ficou na vaga de goleiro (GOL) do sorteio;
+--  * só contam jogos realizados, com placar e com sorteio salvo;
+--  * mínimo de jogos: p_minimo_pct (30%) do total de jogos do ano com placar e sorteio;
+--  * ordem pela MÉDIA AJUSTADA = (gols + p_peso * média geral dos goleiros) / (jogos + p_peso):
+--    com poucos jogos a média puxa para a média geral, então, quando a diferença é pequena,
+--    quem jogou mais fica acima (p_peso = quantos "jogos de dúvida" cada média ganha).
+create or replace function public.ranking_goleiros(
+  p_limite int default 5,
+  p_ano int default null,
+  p_minimo_pct numeric default 0.30,
+  p_peso numeric default 3
+)
+returns table (
+  jogador_id uuid, nome text, apelido text,
+  jogos bigint, gols_sofridos bigint, media numeric, media_ajustada numeric,
+  total_jogos bigint, minimo_jogos int
+)
+language plpgsql stable security definer set search_path = public as $$
+#variable_conflict use_column
+declare
+  v_ano int := coalesce(p_ano, extract(year from now())::int);
+  v_total bigint;
+  v_min int;
+  v_media_geral numeric;
+begin
+  if not public.is_membro() then
+    raise exception 'Acesso negado';
+  end if;
+
+  select count(*) into v_total
+    from public.jogos g
+   where g.status = 'realizado' and g.placar_branco is not null and g.placar_preto is not null
+     and g.sorteio is not null and extract(year from g.data)::int = v_ano;
+  if v_total = 0 then
+    return;
+  end if;
+  v_min := greatest(1, ceil(v_total * p_minimo_pct)::int);
+
+  return query
+    with jv as (
+      select g.sorteio, g.placar_branco, g.placar_preto from public.jogos g
+       where g.status = 'realizado' and g.placar_branco is not null and g.placar_preto is not null
+         and g.sorteio is not null and extract(year from g.data)::int = v_ano
+    ), atuacoes as (   -- uma linha por goleiro e jogo, com os gols que o time dele sofreu
+      select e ->> 'id' as pid, jv.placar_preto::int as sofridos
+        from jv, jsonb_array_elements(jv.sorteio -> 'branco') e where e ->> 'slot' = 'GOL'
+      union all
+      select e ->> 'id', jv.placar_branco::int
+        from jv, jsonb_array_elements(jv.sorteio -> 'preto') e where e ->> 'slot' = 'GOL'
+    ), por_jogador as (
+      select j.id as jid, j.nome as jnome, j.apelido as japelido, count(*) as n, sum(a.sofridos) as gols
+        from atuacoes a join public.jogadores j on j.id::text = a.pid   -- convidados ficam de fora
+       group by j.id, j.nome, j.apelido
+    ), geral as (
+      select sum(pj.gols)::numeric / nullif(sum(pj.n), 0) as media_geral from por_jogador pj
+    )
+    select pj.jid, pj.jnome, pj.japelido, pj.n::bigint, pj.gols::bigint,
+           round(pj.gols::numeric / pj.n, 2),
+           round((pj.gols + p_peso * ge.media_geral) / (pj.n + p_peso), 2),
+           v_total, v_min
+      from por_jogador pj cross join geral ge
+     where pj.n >= v_min
+     order by (pj.gols + p_peso * ge.media_geral) / (pj.n + p_peso), pj.n desc, pj.jnome
+     limit p_limite;
+end;
+$$;
+
 -- Permissões de execução das funções
 revoke execute on function public.gerar_jogos(uuid, int) from public, anon;
 revoke execute on function public.resultado_votacao(uuid) from public, anon;
@@ -1073,6 +1141,7 @@ revoke execute on function public.remover_convidado(uuid) from public, anon;
 revoke execute on function public.caixa_extrato(int) from public, anon;
 revoke execute on function public.caixa_resumo() from public, anon;
 revoke execute on function public.ranking_assiduidade(int, int) from public, anon;
+revoke execute on function public.ranking_goleiros(int, int, numeric, numeric) from public, anon;
 revoke execute on function public.liberacao_confirmacao(uuid) from public, anon;
 revoke execute on function public.confirmacao_aberta(uuid) from public, anon;
 grant execute on function public.gerar_jogos(uuid, int) to authenticated;
@@ -1090,6 +1159,7 @@ grant execute on function public.remover_convidado(uuid) to authenticated;
 grant execute on function public.caixa_extrato(int) to authenticated;
 grant execute on function public.caixa_resumo() to authenticated;
 grant execute on function public.ranking_assiduidade(int, int) to authenticated;
+grant execute on function public.ranking_goleiros(int, int, numeric, numeric) to authenticated;
 grant execute on function public.liberacao_confirmacao(uuid) to authenticated;
 grant execute on function public.confirmacao_aberta(uuid) to authenticated;
 

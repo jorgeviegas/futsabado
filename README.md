@@ -105,7 +105,12 @@ Abra a URL no celular → Chrome: **Instalar app / Adicionar à tela inicial** �
   saídas avulsas). Pagamentos confirmados entram no caixa automaticamente.
 - **Clima:** o admin define a cidade da pelada (busca pela Open-Meteo, gratuita e sem chave) e cada próximo jogo mostra
   a temperatura e a condição do tempo previstas para a hora marcada, até 15 dias à frente.
-- **Rankings:** top 5 de craques, de maiores vencedores e de **assiduidade** (mais presenças no ano).
+- **Rankings:** top 5 de craques, de maiores vencedores, de **assiduidade** (mais presenças no ano) e de **goleiros menos
+  vazados**: média de gols sofridos por jogo no ano (gols do adversário nos jogos em que o jogador ficou na vaga de goleiro
+  do sorteio, com placar registrado). Só entra quem jogou pelo menos **30%** dos jogos do ano com placar e escalação. A ordem
+  usa a **média ajustada** `(gols + 3 × média geral) / (jogos + 3)`: com poucos jogos a média é puxada para a média geral,
+  então, quando a diferença é pequena, quem jogou mais fica acima. Ajuste o mínimo e o peso nos parâmetros da função
+  `ranking_goleiros` (`p_minimo_pct`, `p_peso`).
 
 ## Fluxo de uso
 

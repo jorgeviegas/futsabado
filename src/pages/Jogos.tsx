@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom'
 import { useConfirmadosPorJogo, useJogoAnterior, useLiberacao, useProximoJogo, useResultados } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { confirmacaoLiberada, formatarData, formatarHora, parseData, placarTexto } from '../lib/format'
-import { diasAte } from '../lib/clima'
 import { Erro, Spinner, Vazio } from '../components/ui'
 import Avisos from '../components/Avisos'
 import ClimaJogo from '../components/ClimaJogo'
@@ -140,13 +139,11 @@ function CartaoJogo({ jogo, participantes, pres, destaque = false }: {
   )
 }
 
-/** Data e horário do próximo jogo em destaque: "calendário" com o dia, horário grande e "Hoje/Amanhã/em N dias". */
+/** Data e horário do próximo jogo em destaque: "calendário" com o dia e o horário grande. */
 function DataEmDestaque({ jogo }: { jogo: Jogo }) {
   const d = parseData(jogo.data)
   const semana = d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '').toUpperCase()
   const mes = d.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '').toUpperCase()
-  const dias = diasAte(jogo.data)
-  const quando = dias === 0 ? 'Hoje' : dias === 1 ? 'Amanhã' : dias > 1 ? `em ${dias} dias` : null
   return (
     <div className="data-destaque" aria-label={`${formatarData(jogo.data)} às ${formatarHora(jogo.horario)}`}>
       <div className="data-tile" aria-hidden>
@@ -157,7 +154,6 @@ function DataEmDestaque({ jogo }: { jogo: Jogo }) {
       <div className="data-info">
         <div className="linha">
           <strong className="hora">{formatarHora(jogo.horario)}</strong>
-          {quando && <span className={`chip ${dias <= 1 ? 'grena' : ''}`}>{quando}</span>}
         </div>
         {jogo.local && <span className="muted">📍 {jogo.local}</span>}
       </div>

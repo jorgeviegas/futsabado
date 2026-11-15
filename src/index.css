@@ -176,3 +176,16 @@ select { background-image: linear-gradient(45deg, transparent 50%, var(--texto-2
 .clima.grande .clima-rotulo { font-size: .95rem; }
 .lugar-res { display: block; width: 100%; text-align: left; padding: .5rem .7rem; border-radius: 10px; background: var(--card-2); border: 1px solid var(--borda); cursor: pointer; }
 .lugar-res:active { background: var(--grena-3); }
+
+/* Botões de presença: "Vou" (verde) e "Não vou" (vermelho), separados e com o texto centralizado */
+.presenca { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: .9rem; margin-top: .2rem; }
+.btn-presenca {
+  display: flex; align-items: center; justify-content: center; text-align: center;
+  min-height: 3.4rem; padding: .6rem .8rem; border-radius: 14px; border: 2px solid; background: transparent;
+  font-size: 1.05rem; font-weight: 700; cursor: pointer; transition: background .15s, color .15s;
+}
+.btn-presenca.ok { color: var(--ok); border-color: var(--ok); background: #0f2a1b; }
+.btn-presenca.erro { color: #ff7b80; border-color: var(--erro); background: #2e1214; }
+.btn-presenca.ok.ativo { background: var(--ok); color: #05200f; box-shadow: 0 0 0 3px #3fb26b44; }
+.btn-presenca.erro.ativo { background: var(--erro); color: #fff; box-shadow: 0 0 0 3px #e5484d44; }
+.btn-presenca:disabled { opacity: .45; cursor: not-allowed; }

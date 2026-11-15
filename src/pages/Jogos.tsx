@@ -106,7 +106,6 @@ function CartaoJogo({ jogo, participantes, pres }: { jogo: Jogo; participantes: 
         {jogo.status === 'realizado' && <span className="chip">Realizado</span>}
         {jogo.status === 'agendado' && bloqueado && <span className="chip aviso">Confirmação em {formatarData(liberaEm!)}</span>}
         {jogo.status === 'agendado' && !bloqueado && minha === 'confirmado' && <span className="chip ok">Confirmado ✓</span>}
-        {jogo.status === 'agendado' && !bloqueado && minha === 'talvez' && <span className="chip aviso">Talvez</span>}
         {jogo.status === 'agendado' && !bloqueado && minha === 'ausente' && <span className="chip erro">Ausente</span>}
         {jogo.status === 'agendado' && !bloqueado && !minha && <span className="chip grena">Responder</span>}
       </div>

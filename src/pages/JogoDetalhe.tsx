@@ -19,7 +19,6 @@ const NOME_SLOT = { GOL: 'Goleiro', ZAG1: 'Zagueiro', ZAG2: 'Zagueiro', ALA1: 'A
 
 const OPCOES: { v: StatusPresenca; rot: string; cls: string }[] = [
   { v: 'confirmado', rot: '✓ Vou', cls: 'ok' },
-  { v: 'talvez', rot: '? Talvez', cls: 'aviso' },
   { v: 'ausente', rot: '✕ Não vou', cls: 'erro' },
 ]
 
@@ -58,7 +57,6 @@ export default function JogoDetalhe() {
   const confirmados = jogadores.filter((j) => pres.some((p) => p.jogador_id === j.id && p.status === 'confirmado'))
   const participantes = [...confirmados, ...convidadosComoJogador]
   const liberada = isAdmin || confirmacaoLiberada(liberaEm)
-  const talvez = jogadores.filter((j) => pres.some((p) => p.jogador_id === j.id && p.status === 'talvez'))
   const ausentes = jogadores.filter((j) => pres.some((p) => p.jogador_id === j.id && p.status === 'ausente'))
   const limite = jogo.peladas?.limite_jogadores
   const cheio = Boolean(limite && participantes.length >= limite)
@@ -110,11 +108,13 @@ export default function JogoDetalhe() {
         <div className="card">
           <h2>Você vai?</h2>
           {isAdmin && !confirmacaoLiberada(liberaEm) && <p className="muted">Ainda não aberta para os jogadores (abre em {formatarData(liberaEm!)}); você, como admin, pode confirmar.</p>}
-          <div className="seg">
+          <div className="presenca">
             {OPCOES.map((o) => (
               <button
                 key={o.v}
-                className={`${minha === o.v ? 'ativo' : ''} ${o.cls}`}
+                type="button"
+                aria-pressed={minha === o.v}
+                className={`btn-presenca ${o.cls} ${minha === o.v ? 'ativo' : ''}`}
                 disabled={definir.isPending || (o.v === 'confirmado' && lotado)}
                 onClick={() => {
                   if (o.v === 'confirmado' && precisaFuncao && minha !== 'confirmado') return setEscolhendoFuncao(true)
@@ -163,7 +163,6 @@ export default function JogoDetalhe() {
         convidadoDe={donoDoConvidado}
         funcoes={Object.fromEntries(pres.filter((p) => p.funcao).map((p) => [p.jogador_id, p.funcao!]))}
       />
-      {talvez.length > 0 && <Lista titulo={`Talvez (${talvez.length})`} lista={talvez} />}
       {ausentes.length > 0 && <Lista titulo={`Não vão (${ausentes.length})`} lista={ausentes} />}
 
       {jogo.sorteio && <Times jogo={jogo} jogadores={todos} jogosAno={jogosAno} />}

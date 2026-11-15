@@ -31,7 +31,7 @@ export default function Peladas() {
           <div className="muted">
             Toda {DIAS[p.dia_semana].toLowerCase()} às {formatarHora(p.horario)}{p.local && ` · ${p.local}`}
             <br />
-            {p.limite_jogadores ? `Limite ${p.limite_jogadores} · ` : ''}{p.goleiros_isentos ? 'Goleiros isentos · ' : ''}Mensalidade {moeda(p.valor_mensalidade)} · {moeda(p.valor_avulso)} por jogo
+            {p.limite_jogadores ? `Limite ${p.limite_jogadores} · ` : ''}{p.goleiros_isentos ? 'Goleiros isentos · ' : ''}{p.gerar_proximo_dias_antes != null ? `🔄 Gera o próximo jogo ${p.gerar_proximo_dias_antes} dias antes · ` : ''}Mensalidade {moeda(p.valor_mensalidade)} · {moeda(p.valor_avulso)} por jogo
           </div>
           <div className="linha wrap">
             <button
@@ -68,6 +68,8 @@ function Form({ inicial, onFechar }: { inicial: Partial<Pelada>; onFechar: () =>
     valor_avulso: String(inicial.valor_avulso ?? 0),
     liberar: String(inicial.liberar_confirmacao_dias ?? 2),
     goleirosIsentos: inicial.goleiros_isentos ?? false,
+    autoGerar: inicial.gerar_proximo_dias_antes != null,
+    autoDias: String(inicial.gerar_proximo_dias_antes ?? 5),
     latitude: inicial.latitude ?? null,
     longitude: inicial.longitude ?? null,
     cidade: inicial.cidade ?? '',
@@ -86,6 +88,7 @@ function Form({ inicial, onFechar }: { inicial: Partial<Pelada>; onFechar: () =>
               valor_mensalidade: Number(f.valor_mensalidade) || 0, valor_avulso: Number(f.valor_avulso) || 0, ativa: f.ativa,
               liberar_confirmacao_dias: Math.min(6, Math.max(0, Number(f.liberar) || 0)),
               goleiros_isentos: f.goleirosIsentos,
+              gerar_proximo_dias_antes: f.autoGerar ? Math.min(30, Math.max(0, Math.round(Number(f.autoDias) || 0))) : null,
               latitude: f.latitude, longitude: f.longitude, cidade: f.latitude == null ? null : f.cidade || null,
             },
             { onSuccess: onFechar },
@@ -113,6 +116,19 @@ function Form({ inicial, onFechar }: { inicial: Partial<Pelada>; onFechar: () =>
           onEscolher={(l) => setF({ ...f, latitude: l.latitude, longitude: l.longitude, cidade: l.cidade })}
           onLimpar={() => setF({ ...f, latitude: null, longitude: null, cidade: '' })}
         />
+        <label className="linha">
+          <input type="checkbox" style={{ width: 'auto' }} checked={f.autoGerar} onChange={(e) => setF({ ...f, autoGerar: e.target.checked })} />
+          <span>🔄 Gerar o próximo jogo automaticamente</span>
+        </label>
+        {f.autoGerar && (
+          <label>Gerar quantos dias antes da data do jogo?
+            <input type="number" inputMode="numeric" min={0} max={30} value={f.autoDias} onChange={(e) => setF({ ...f, autoDias: e.target.value })} />
+            <span className="muted">
+              Ex.: 5 = o jogo de sábado é criado na segunda-feira da mesma semana. A criação acontece quando alguém abre o app,
+              sem repetir jogos nem recriar um jogo cancelado.
+            </span>
+          </label>
+        )}
         <label>Liberar a confirmação de presença (dias após o jogo anterior)
           <input type="number" min={0} max={6} value={f.liberar} onChange={(e) => setF({ ...f, liberar: e.target.value })} />
           <span className="muted">Ex.: 2 = segunda-feira para jogos de sábado; 1 = domingo. Admins confirmam a qualquer momento.</span>

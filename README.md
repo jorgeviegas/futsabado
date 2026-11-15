@@ -112,6 +112,16 @@ Abra a URL no celular → Chrome: **Instalar app / Adicionar à tela inicial** �
   então, quando a diferença é pequena, quem jogou mais fica acima. Ajuste o mínimo e o peso nos parâmetros da função
   `ranking_goleiros` (`p_minimo_pct`, `p_peso`).
 
+## Automação, avisos e Pix
+
+- **Próximo jogo automático:** na pelada, marque "Gerar o próximo jogo automaticamente" e informe quantos dias antes da data
+  (ex.: 5 = o jogo de sábado é criado na segunda-feira). A criação acontece quando alguém abre o app: nunca gera jogo no
+  passado, não duplica e não recria um jogo cancelado.
+- **Próximo jogo em destaque:** na aba *Jogos*, data (calendário), horário grande e "Hoje/Amanhã/em N dias".
+- **Avisos do time (admin):** na aba *Jogos*, o admin cria avisos avulsos com período de validade; eles aparecem no quadro de
+  avisos de todos enquanto estiverem válidos.
+- **Pix do time:** em *Financeiro → Caixa*, todos veem e copiam a chave Pix com um toque; o admin cadastra/edita.
+
 ## Fluxo de uso
 
 1. **Peladas** (admin): crie “Pelada de Sábado” (dia, horário, local, limite, valores) e toque em *Gerar próximas 4 semanas*.

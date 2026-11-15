@@ -6,6 +6,7 @@ import { useAuth } from '../lib/auth'
 import { totalDe, type Cobranca } from '../lib/financeiro'
 import { exibir, hojeISO, moeda, parseData } from '../lib/format'
 import { Erro, Spinner } from '../components/ui'
+import PixDoTime from '../components/PixDoTime'
 
 type Aba = 'caixa' | 'cobrancas' | 'lancar'
 
@@ -58,6 +59,8 @@ function Caixa() {
       </div>
 
       {eu && <MinhasPendencias jogadorId={eu.id} />}
+
+      <PixDoTime />
 
       <div className="card">
         <h2>Entradas e saídas</h2>

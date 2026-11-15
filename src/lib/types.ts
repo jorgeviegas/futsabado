@@ -38,6 +38,8 @@ export interface Pelada {
   cidade: string | null
   /** Goleiros não pagam o jogo em que jogaram no gol. */
   goleiros_isentos: boolean
+  /** Gera o próximo jogo automaticamente quando faltarem N dias (null = desligado). */
+  gerar_proximo_dias_antes: number | null
   ativa: boolean
 }
 
@@ -186,4 +188,22 @@ export interface RankingGoleiro {
   media_ajustada: number
   total_jogos: number
   minimo_jogos: number
+}
+
+/** Aviso avulso do admin, visível no quadro de avisos durante o período de validade. */
+export interface AvisoAvulso {
+  id: string
+  titulo: string
+  mensagem: string | null
+  inicio: string
+  fim: string
+}
+
+export type TipoPix = 'cpf' | 'cnpj' | 'email' | 'telefone' | 'aleatoria'
+
+export interface ConfigTime {
+  id: number
+  pix_chave: string | null
+  pix_tipo: TipoPix | null
+  pix_beneficiario: string | null
 }

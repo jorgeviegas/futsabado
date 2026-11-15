@@ -4,7 +4,7 @@ import { supabase } from './supabase'
 import { hojeISO, somaDias } from './format'
 import { gerarCobrancas, type ConvidadoJogou, type Jogou } from './financeiro'
 import type {
-  Convidado, ExtratoItem, FuncaoGoleiro, Jogador, Jogo, Lancamento, Pagamento, Pelada, Presenca, RankingAssiduo,
+  AvisoAvulso, ConfigTime, Convidado, ExtratoItem, FuncaoGoleiro, Jogador, Jogo, Lancamento, Pagamento, Pelada, Presenca, RankingAssiduo,
   RankingCraque, RankingGoleiro, RankingVencedor, ResultadoVotacao, ResumoCaixa, StatusPresenca, TipoPagamento, Voto,
 } from './types'
 
@@ -53,13 +53,16 @@ export const usePeladas = () =>
 
 export const useSalvarPelada = () =>
   useAcao(
-    async (p: Partial<Pelada> & { nome: string }) =>
+    async (p: Partial<Pelada> & { nome: string }) => {
       ok(
         p.id
           ? await supabase.from('peladas').update(p).eq('id', p.id)
           : await supabase.from('peladas').insert(p),
-      ),
-    [['peladas']],
+      )
+      // com a geração automática ligada, já cria o próximo jogo se estiver na hora
+      await gerarJogosAutomaticos()
+    },
+    [['peladas'], ['jogos']],
   )
 
 export const useExcluirPelada = () =>
@@ -116,6 +119,13 @@ export const useResultados = () =>
         await supabase.from('jogos').select(JOGO_SELECT).eq('status', 'realizado').order('data', { ascending: false }).limit(30),
       ) as unknown as Jogo[],
   })
+
+/** Cria o próximo jogo das peladas com geração automática ligada, quando faltarem N dias ou menos. Chamada ao abrir o app. */
+export const gerarJogosAutomaticos = async (): Promise<number> => {
+  const { data, error } = await supabase.rpc('gerar_jogos_automaticos')
+  if (error) return 0
+  return Number(data ?? 0)
+}
 
 /** Marca como realizados os jogos que já passaram (a votação abre sozinha). Chamada ao abrir o app. */
 export const processarJogos = async (): Promise<number> => {
@@ -493,3 +503,35 @@ export const useJogosSemPlacar = (habilitado: boolean) =>
           .order('data', { ascending: false }),
       ) as unknown as Jogo[],
   })
+
+// ---------- Avisos avulsos e configurações do time ----------
+/** Avisos ainda não vencidos (os que ainda vão começar aparecem só para o admin gerenciar). */
+export const useAvisosAvulsos = () =>
+  useQuery({
+    queryKey: ['avisosAvulsos'],
+    queryFn: async () =>
+      ok(await supabase.from('avisos_avulsos').select('*').gte('fim', hojeISO()).order('inicio').order('created_at')) as AvisoAvulso[],
+  })
+
+export const useSalvarAviso = () =>
+  useAcao(
+    async (a: Pick<AvisoAvulso, 'titulo' | 'mensagem' | 'inicio' | 'fim'> & { created_by?: string }) =>
+      ok(await supabase.from('avisos_avulsos').insert(a)),
+    [['avisosAvulsos']],
+  )
+
+export const useExcluirAviso = () =>
+  useAcao(async (id: string) => ok(await supabase.from('avisos_avulsos').delete().eq('id', id)), [['avisosAvulsos']])
+
+export const useConfigTime = () =>
+  useQuery({
+    queryKey: ['configTime'],
+    queryFn: async () => ok(await supabase.from('config_time').select('*').eq('id', 1).maybeSingle()) as ConfigTime | null,
+  })
+
+export const useSalvarConfigTime = () =>
+  useAcao(
+    async (c: Pick<ConfigTime, 'pix_chave' | 'pix_tipo' | 'pix_beneficiario'>) =>
+      ok(await supabase.from('config_time').upsert({ id: 1, ...c })),
+    [['configTime']],
+  )

@@ -2,10 +2,12 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useConfirmadosPorJogo, useJogoAnterior, useLiberacao, useProximoJogo, useResultados } from '../lib/api'
 import { useAuth } from '../lib/auth'
-import { confirmacaoLiberada, formatarData, formatarHora, placarTexto } from '../lib/format'
+import { confirmacaoLiberada, formatarData, formatarHora, parseData, placarTexto } from '../lib/format'
+import { diasAte } from '../lib/clima'
 import { Erro, Spinner, Vazio } from '../components/ui'
 import Avisos from '../components/Avisos'
 import ClimaJogo from '../components/ClimaJogo'
+import AvisosAdmin from '../components/AvisosAdmin'
 import type { Jogo } from '../lib/types'
 
 type Aba = 'jogos' | 'resultados'
@@ -29,6 +31,7 @@ export default function Jogos() {
 
 /** Mostra apenas o próximo jogo e o jogo anterior. */
 function AnteriorEProximo() {
+  const { isAdmin } = useAuth()
   const proximo = useProximoJogo()
   const anterior = useJogoAnterior()
   const jogos = [proximo.data, anterior.data].filter(Boolean) as Jogo[]
@@ -42,7 +45,7 @@ function AnteriorEProximo() {
     <>
       <h2>Próximo jogo</h2>
       {proximo.data ? (
-        <CartaoJogo jogo={proximo.data} participantes={pres?.contagem[proximo.data.id] ?? 0} pres={pres?.rows} />
+        <CartaoJogo jogo={proximo.data} participantes={pres?.contagem[proximo.data.id] ?? 0} pres={pres?.rows} destaque />
       ) : (
         <Vazio>Nenhum jogo agendado. Um admin pode gerar os jogos em “Peladas”.</Vazio>
       )}
@@ -52,6 +55,7 @@ function AnteriorEProximo() {
       ) : (
         <Vazio>Nenhum jogo realizado ainda.</Vazio>
       )}
+      {isAdmin && <AvisosAdmin />}
     </>
   )
 }
@@ -91,7 +95,11 @@ function Placar({ jogo }: { jogo: Jogo }) {
   )
 }
 
-function CartaoJogo({ jogo, participantes, pres }: { jogo: Jogo; participantes: number; pres?: { jogo_id: string; jogador_id: string; status: string }[] }) {
+function CartaoJogo({ jogo, participantes, pres, destaque = false }: {
+  jogo: Jogo; participantes: number; pres?: { jogo_id: string; jogador_id: string; status: string }[]
+  /** Próximo jogo: data e horário em destaque. */
+  destaque?: boolean
+}) {
   const { eu } = useAuth()
   const { data: liberaEm } = useLiberacao(jogo.status === 'agendado' ? jogo.id : undefined)
   const limite = jogo.peladas?.limite_jogadores
@@ -110,18 +118,48 @@ function CartaoJogo({ jogo, participantes, pres }: { jogo: Jogo; participantes: 
         {jogo.status === 'agendado' && !bloqueado && minha === 'ausente' && <span className="chip erro">Ausente</span>}
         {jogo.status === 'agendado' && !bloqueado && !minha && <span className="chip grena">Responder</span>}
       </div>
-      <div className="linha entre wrap">
-        <div className="muted">
-          {formatarData(jogo.data)} · {formatarHora(jogo.horario)}
-          {jogo.local && ` · ${jogo.local}`}
+      {destaque && jogo.status === 'agendado' ? (
+        <DataEmDestaque jogo={jogo} />
+      ) : (
+        <div className="linha entre wrap">
+          <div className="muted">
+            {formatarData(jogo.data)} · {formatarHora(jogo.horario)}
+            {jogo.local && ` · ${jogo.local}`}
+          </div>
+          <ClimaJogo jogo={jogo} />
         </div>
-        <ClimaJogo jogo={jogo} />
-      </div>
+      )}
       {jogo.status === 'realizado' && <Placar jogo={jogo} />}
       <div className="muted">
         👥 {participantes}{limite ? `/${limite}` : ''} {jogo.status === 'realizado' ? 'jogaram' : 'confirmados'}
         {jogo.votacao_aberta && ' · 🗳️ votação aberta'}
       </div>
     </Link>
+  )
+}
+
+/** Data e horário do próximo jogo em destaque: "calendário" com o dia, horário grande e "Hoje/Amanhã/em N dias". */
+function DataEmDestaque({ jogo }: { jogo: Jogo }) {
+  const d = parseData(jogo.data)
+  const semana = d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '').toUpperCase()
+  const mes = d.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '').toUpperCase()
+  const dias = diasAte(jogo.data)
+  const quando = dias === 0 ? 'Hoje' : dias === 1 ? 'Amanhã' : dias > 1 ? `em ${dias} dias` : null
+  return (
+    <div className="data-destaque" aria-label={`${formatarData(jogo.data)} às ${formatarHora(jogo.horario)}`}>
+      <div className="data-tile" aria-hidden>
+        <span>{semana}</span>
+        <strong>{d.getDate()}</strong>
+        <span>{mes}</span>
+      </div>
+      <div className="data-info">
+        <div className="linha">
+          <strong className="hora">{formatarHora(jogo.horario)}</strong>
+          {quando && <span className={`chip ${dias <= 1 ? 'grena' : ''}`}>{quando}</span>}
+        </div>
+        {jogo.local && <span className="muted">📍 {jogo.local}</span>}
+      </div>
+      <ClimaJogo jogo={jogo} />
+    </div>
   )
 }

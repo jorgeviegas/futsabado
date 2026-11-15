@@ -1,7 +1,7 @@
 -- =====================================================================
 -- FutSábado - RESET DOS DADOS  (⚠️ DESTRUTIVO E IRREVERSÍVEL)
 --
--- Apaga TODOS os dados do app e mantém apenas o jogador administrador
+-- Apaga TODOS os dados do app (a chave Pix do time, em config_time, é mantida) e mantém apenas o jogador administrador
 -- indicado em v_email_admin. A estrutura (tabelas, regras, funções) NÃO é
 -- alterada: é só esvaziar. Use para "zerar" o app depois de testes.
 --
@@ -48,6 +48,7 @@ begin
     public.votos,
     public.convidados,
     public.caixa_lancamentos,
+    public.avisos_avulsos,
     public.presencas,
     public.pagamentos,
     public.jogos,

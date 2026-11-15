@@ -195,6 +195,35 @@ alter table public.presencas drop constraint if exists presencas_status_check;
 alter table public.presencas add constraint presencas_status_check
   check (status in ('confirmado','talvez','ausente','faltou','espera'));
 
+-- v11: geração automática do próximo jogo, avisos avulsos do admin e Pix do time
+alter table public.peladas add column if not exists gerar_proximo_dias_antes smallint;
+alter table public.peladas drop constraint if exists peladas_gerar_dias_check;
+alter table public.peladas add constraint peladas_gerar_dias_check
+  check (gerar_proximo_dias_antes is null or gerar_proximo_dias_antes between 0 and 30);
+
+-- Avisos avulsos: aparecem no quadro de avisos de todos enquanto estiverem no período de validade.
+create table if not exists public.avisos_avulsos (
+  id          uuid primary key default gen_random_uuid(),
+  titulo      text not null check (length(trim(titulo)) > 0),
+  mensagem    text,
+  inicio      date not null default current_date,
+  fim         date not null,
+  created_by  uuid references public.jogadores(id) on delete set null,
+  created_at  timestamptz not null default now(),
+  check (fim >= inicio)
+);
+create index if not exists avisos_avulsos_fim_idx on public.avisos_avulsos (fim);
+
+-- Configurações do time (uma única linha): chave Pix para os pagamentos.
+create table if not exists public.config_time (
+  id                int primary key default 1 check (id = 1),
+  pix_chave         text,
+  pix_tipo          text check (pix_tipo is null or pix_tipo in ('cpf','cnpj','email','telefone','aleatoria')),
+  pix_beneficiario  text,
+  updated_at        timestamptz not null default now()
+);
+insert into public.config_time (id) values (1) on conflict (id) do nothing;
+
 -- Caixa do time: entradas e saídas avulsas (as mensalidades/jogos pagos entram automaticamente no extrato).
 create table if not exists public.caixa_lancamentos (
   id          uuid primary key default gen_random_uuid(),
@@ -318,6 +347,11 @@ begin
   return new;
 end;
 $$;
+
+drop trigger if exists config_time_touch on public.config_time;
+create trigger config_time_touch
+  before update on public.config_time
+  for each row execute function public.touch_updated_at();
 
 drop trigger if exists presencas_touch on public.presencas;
 create trigger presencas_touch
@@ -527,6 +561,8 @@ alter table public.presencas  enable row level security;
 alter table public.votos      enable row level security;
 alter table public.pagamentos enable row level security;
 alter table public.convidados enable row level security;
+alter table public.avisos_avulsos enable row level security;
+alter table public.config_time enable row level security;
 alter table public.caixa_lancamentos enable row level security;
 
 -- jogadores
@@ -646,6 +682,21 @@ create policy caixa_select on public.caixa_lancamentos for select to authenticat
   using (public.is_membro());
 drop policy if exists caixa_admin on public.caixa_lancamentos;
 create policy caixa_admin on public.caixa_lancamentos for all to authenticated
+  using (public.is_admin()) with check (public.is_admin());
+
+-- avisos avulsos e config do time: membros leem; só admin escreve
+drop policy if exists avisos_select on public.avisos_avulsos;
+create policy avisos_select on public.avisos_avulsos for select to authenticated
+  using (public.is_membro());
+drop policy if exists avisos_admin on public.avisos_avulsos;
+create policy avisos_admin on public.avisos_avulsos for all to authenticated
+  using (public.is_admin()) with check (public.is_admin());
+
+drop policy if exists config_select on public.config_time;
+create policy config_select on public.config_time for select to authenticated
+  using (public.is_membro());
+drop policy if exists config_admin on public.config_time;
+create policy config_admin on public.config_time for all to authenticated
   using (public.is_admin()) with check (public.is_admin());
 
 -- ---------------------------------------------------------------------
@@ -1120,6 +1171,43 @@ begin
 end;
 $$;
 
+-- Geração automática do próximo jogo: para cada pelada ativa com "gerar_proximo_dias_antes" definido, cria o jogo da
+-- próxima data (do dia da semana da pelada, depois do último jogo existente) assim que faltarem N dias ou menos para ela.
+-- Nunca gera jogo no passado nem recria um jogo cancelado (a data continua ocupada). O app chama isto ao abrir.
+create or replace function public.gerar_jogos_automaticos()
+returns int language plpgsql security definer set search_path = public as $$
+declare
+  v_hoje date := (now() at time zone 'America/Sao_Paulo')::date;
+  v_pel public.peladas;
+  v_base date;
+  v_data date;
+  v_total int := 0;
+  v_linhas int;
+begin
+  if not public.is_membro() then
+    return 0;
+  end if;
+
+  for v_pel in select * from public.peladas where ativa and gerar_proximo_dias_antes is not null loop
+    select greatest(coalesce(max(j.data), v_hoje - 1), v_hoje - 1) into v_base
+      from public.jogos j where j.pelada_id = v_pel.id;
+
+    for i in 1..8 loop
+      -- próxima ocorrência do dia da semana, estritamente depois de v_base
+      v_data := v_base + (((v_pel.dia_semana - extract(dow from v_base)::int + 6) % 7) + 1);
+      exit when v_hoje < v_data - v_pel.gerar_proximo_dias_antes;
+      insert into public.jogos (pelada_id, data, horario, local, valor)
+      values (v_pel.id, v_data, v_pel.horario, v_pel.local, v_pel.valor_avulso)
+      on conflict (pelada_id, data) do nothing;
+      get diagnostics v_linhas = row_count;
+      v_total := v_total + v_linhas;
+      v_base := v_data;
+    end loop;
+  end loop;
+  return v_total;
+end;
+$$;
+
 -- Permissões de execução das funções
 revoke execute on function public.gerar_jogos(uuid, int) from public, anon;
 revoke execute on function public.resultado_votacao(uuid) from public, anon;
@@ -1129,6 +1217,7 @@ revoke execute on function public.ranking_vencedores(int) from public, anon;
 revoke execute on function public.jogos_no_ano(int) from public, anon;
 revoke execute on function public.marcar_pagamento(uuid, text, date, uuid, numeric, boolean, uuid) from public, anon;
 revoke execute on function public.processar_jogos() from public, anon;
+revoke execute on function public.gerar_jogos_automaticos() from public, anon;
 revoke execute on function public._tirar_do_sorteio(uuid, text) from public, anon, authenticated;
 revoke execute on function public.promover_espera(uuid) from public, anon, authenticated;
 revoke execute on function public.vagas_ocupadas(uuid, uuid) from public, anon, authenticated;
@@ -1150,6 +1239,7 @@ grant execute on function public.ranking_vencedores(int) to authenticated;
 grant execute on function public.jogos_no_ano(int) to authenticated;
 grant execute on function public.marcar_pagamento(uuid, text, date, uuid, numeric, boolean, uuid) to authenticated;
 grant execute on function public.processar_jogos() to authenticated;
+grant execute on function public.gerar_jogos_automaticos() to authenticated;
 grant execute on function public.remover_faltoso(uuid, uuid) to authenticated;
 grant execute on function public.encerrar_jogo(uuid, uuid[], uuid[], int, int) to authenticated;
 grant execute on function public.pagamentos_do_jogo(uuid) to authenticated;

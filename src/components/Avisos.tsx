@@ -1,10 +1,10 @@
 import { Link } from 'react-router-dom'
 import {
-  useCobrancas, useJogadores, useJogosSemEncerrar, useJogosSemPlacar, useJogosVotacaoAberta, useLiberacao, useMeusVotos, useMinhasPresencas,
+  useAvisosAvulsos, useCobrancas, useJogadores, useJogosSemEncerrar, useJogosSemPlacar, useJogosVotacaoAberta, useLiberacao, useMeusVotos, useMinhasPresencas,
   useProximoJogo,
 } from '../lib/api'
 import { useAuth } from '../lib/auth'
-import { confirmacaoLiberada, formatarData, moeda } from '../lib/format'
+import { confirmacaoLiberada, formatarData, hojeISO, moeda } from '../lib/format'
 import { totalDe } from '../lib/financeiro'
 
 interface Aviso {
@@ -13,7 +13,8 @@ interface Aviso {
   titulo: string
   detalhe?: string
   linhas?: string[]
-  to: string
+  /** Sem `to`, o aviso é só informativo (não é um link). */
+  to?: string
   destaque?: boolean
   /** Pendência financeira: destaque em vermelho. */
   perigo?: boolean
@@ -35,7 +36,21 @@ export default function Avisos() {
 
   const { cobrancas: minhasCobrancas } = useCobrancas(eu?.id)
 
+  const { data: avulsos = [] } = useAvisosAvulsos()
+
   const avisos: Aviso[] = []
+
+  // -1) Avisos avulsos do admin dentro do período de validade (informativos)
+  const hoje = hojeISO()
+  avulsos
+    .filter((a) => a.inicio <= hoje && a.fim >= hoje)
+    .forEach((a) =>
+      avisos.push({
+        chave: `avulso-${a.id}`, icone: '📢', destaque: true,
+        titulo: a.titulo,
+        linhas: a.mensagem ? [a.mensagem] : undefined,
+      }),
+    )
 
   // 0) Pendência financeira do jogador logado (sempre em primeiro lugar)
   if (eu) {
@@ -134,17 +149,25 @@ export default function Avisos() {
   return (
     <section className="card avisos" aria-label="Quadro de avisos">
       <h2>📌 Quadro de avisos <span className="chip grena">{avisos.length}</span></h2>
-      {avisos.map((a) => (
-        <Link key={a.chave} to={a.to} className={`aviso ${a.destaque ? 'destaque' : ''} ${a.perigo ? 'perigo' : ''}`}>
-          <span className="aviso-icone" aria-hidden>{a.icone}</span>
-          <span className="grow">
-            <strong>{a.titulo}</strong>
-            {a.detalhe && <span className="muted" style={{ display: 'block' }}>{a.detalhe}</span>}
-            {a.linhas?.map((l) => <span key={l} className="muted" style={{ display: 'block' }}>{l}</span>)}
-          </span>
-          <span aria-hidden>›</span>
-        </Link>
-      ))}
+      {avisos.map((a) => {
+        const corpo = (
+          <>
+            <span className="aviso-icone" aria-hidden>{a.icone}</span>
+            <span className="grow">
+              <strong>{a.titulo}</strong>
+              {a.detalhe && <span className="muted" style={{ display: 'block' }}>{a.detalhe}</span>}
+              {a.linhas?.map((l) => <span key={l} className="muted" style={{ display: 'block', whiteSpace: 'pre-line' }}>{l}</span>)}
+            </span>
+            {a.to && <span aria-hidden>›</span>}
+          </>
+        )
+        const classe = `aviso ${a.destaque ? 'destaque' : ''} ${a.perigo ? 'perigo' : ''}`
+        return a.to ? (
+          <Link key={a.chave} to={a.to} className={classe}>{corpo}</Link>
+        ) : (
+          <div key={a.chave} className={classe}>{corpo}</div>
+        )
+      })}
     </section>
   )
 }

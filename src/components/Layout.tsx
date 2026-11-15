@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { processarJogos } from '../lib/api'
+import { gerarJogosAutomaticos, processarJogos } from '../lib/api'
 import { useAuth } from '../lib/auth'
 
 const base = import.meta.env.BASE_URL
@@ -10,10 +10,11 @@ export default function Layout() {
   const { eu, isAdmin, sair } = useAuth()
   const qc = useQueryClient()
 
-  // Ao abrir o app: jogos que já passaram viram "realizados" e a votação do craque abre sozinha.
+  // Ao abrir o app: jogos que já passaram viram "realizados" (a votação do craque abre sozinha)
+  // e os próximos jogos das peladas com geração automática são criados.
   useEffect(() => {
-    processarJogos().then((n) => {
-      if (n > 0) qc.invalidateQueries({ queryKey: ['jogos'] })
+    Promise.all([processarJogos(), gerarJogosAutomaticos()]).then(([realizados, criados]) => {
+      if (realizados > 0 || criados > 0) qc.invalidateQueries({ queryKey: ['jogos'] })
     })
   }, [qc])
   return (

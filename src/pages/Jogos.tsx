@@ -8,6 +8,7 @@ import { Erro, Spinner, Vazio } from '../components/ui'
 import Avisos from '../components/Avisos'
 import ClimaJogo from '../components/ClimaJogo'
 import AvisosAdmin from '../components/AvisosAdmin'
+import Patrocinadores from '../components/Patrocinadores'
 import type { Jogo } from '../lib/types'
 
 type Aba = 'jogos' | 'resultados'
@@ -25,6 +26,7 @@ export default function Jogos() {
         ))}
       </div>
       {aba === 'jogos' ? <AnteriorEProximo /> : <Resultados />}
+      <Patrocinadores />
     </>
   )
 }

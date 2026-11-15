@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { useCriarJogoAvulso, useExcluirPelada, useGerarJogos, usePeladas, useSalvarPelada } from '../lib/api'
-import { DIAS, formatarHora, hojeISO, moeda } from '../lib/format'
+import { useCriarJogoAvulso, useExcluirPelada, useGerarJogos, useJogosDaPelada, usePeladas, useSalvarPelada } from '../lib/api'
+import { DIAS, formatarHora, hojeISO, moeda, parseData } from '../lib/format'
 import { buscarLugar, type Lugar } from '../lib/clima'
 import { Erro, Modal, Spinner, Vazio } from '../components/ui'
 import type { Pelada } from '../lib/types'
@@ -55,9 +55,15 @@ export default function Peladas() {
   )
 }
 
+/** Jogos agendados que ainda não começaram. */
+const aindaNaoComecou = (j: { data: string; horario: string; status: string }) =>
+  j.status === 'agendado' && new Date(`${j.data}T${j.horario}`).getTime() > Date.now()
+
 function Form({ inicial, onFechar }: { inicial: Partial<Pelada>; onFechar: () => void }) {
   const salvar = useSalvarPelada()
-  const excluir = useExcluirPelada()
+  const { data: jogosDaPelada = [] } = useJogosDaPelada(inicial.id)
+  const [aplicar, setAplicar] = useState<{ pelada: Partial<Pelada> & { nome: string }; mudancas: string[]; total: number } | null>(null)
+  const [excluindo, setExcluindo] = useState(false)
   const [f, setF] = useState({
     nome: inicial.nome ?? 'Pelada de Sábado',
     dia_semana: inicial.dia_semana ?? 6,
@@ -81,8 +87,7 @@ function Form({ inicial, onFechar }: { inicial: Partial<Pelada>; onFechar: () =>
         className="form"
         onSubmit={(e) => {
           e.preventDefault()
-          salvar.mutate(
-            {
+          const pelada = {
               id: inicial.id, nome: f.nome.trim(), dia_semana: Number(f.dia_semana), horario: f.horario,
               local: f.local.trim() || null, limite_jogadores: f.limite_jogadores ? Number(f.limite_jogadores) : null,
               valor_mensalidade: Number(f.valor_mensalidade) || 0, valor_avulso: Number(f.valor_avulso) || 0, ativa: f.ativa,
@@ -90,9 +95,17 @@ function Form({ inicial, onFechar }: { inicial: Partial<Pelada>; onFechar: () =>
               goleiros_isentos: f.goleirosIsentos,
               gerar_proximo_dias_antes: f.autoGerar ? Math.min(30, Math.max(0, Math.round(Number(f.autoDias) || 0))) : null,
               latitude: f.latitude, longitude: f.longitude, cidade: f.latitude == null ? null : f.cidade || null,
-            },
-            { onSuccess: onFechar },
-          )
+          }
+          // Editando um modelo que já tem jogos agendados: pergunta se as mudanças valem para eles também
+          if (inicial.id) {
+            const regulares = jogosDaPelada.filter((j) => aindaNaoComecou(j) && parseData(j.data).getDay() === inicial.dia_semana).length
+            const mudancas = descreverMudancas(inicial, pelada)
+            if (mudancas.length > 0 && regulares > 0) {
+              setAplicar({ pelada, mudancas, total: regulares })
+              return
+            }
+          }
+          salvar.mutate({ pelada }, { onSuccess: onFechar })
         }}
       >
         <label>Nome<input value={f.nome} onChange={(e) => setF({ ...f, nome: e.target.value })} required /></label>
@@ -138,14 +151,24 @@ function Form({ inicial, onFechar }: { inicial: Partial<Pelada>; onFechar: () =>
           <span>🧤 Goleiros isentos: quem jogou no gol não paga o jogo</span>
         </label>
         <label className="linha"><input type="checkbox" style={{ width: 'auto' }} checked={f.ativa} onChange={(e) => setF({ ...f, ativa: e.target.checked })} /> Ativa</label>
-        <Erro erro={salvar.error ?? excluir.error} />
+        <Erro erro={salvar.error} />
         <button className="btn" disabled={salvar.isPending}>Salvar</button>
         {inicial.id && (
-          <button type="button" className="btn perigo" onClick={() => confirm('Excluir pelada e todos os jogos dela?') && excluir.mutate(inicial.id!, { onSuccess: onFechar })}>
+          <button type="button" className="btn perigo" onClick={() => setExcluindo(true)}>
             Excluir
           </button>
         )}
       </form>
+      {aplicar && (
+        <AplicarAosProximos
+          mudancas={aplicar.mudancas} total={aplicar.total} salvando={salvar.isPending} erro={salvar.error}
+          diaMuda={aplicar.pelada.dia_semana !== inicial.dia_semana}
+          onAplicar={() => salvar.mutate({ pelada: aplicar.pelada, aplicarAosProximos: true, diaAntigo: inicial.dia_semana }, { onSuccess: onFechar })}
+          onManter={() => salvar.mutate({ pelada: aplicar.pelada }, { onSuccess: onFechar })}
+          onVoltar={() => setAplicar(null)}
+        />
+      )}
+      {excluindo && inicial.id && <ExcluirPelada pelada={inicial as Pelada} onFechar={() => setExcluindo(false)} onExcluida={onFechar} />}
     </Modal>
   )
 }
@@ -226,5 +249,85 @@ function LocalDoClima({ cidade, onEscolher, onLimpar }: {
         </>
       )}
     </div>
+  )
+}
+
+/** O que mudou em relação à pelada salva (só o que afeta os jogos). */
+function descreverMudancas(a: Partial<Pelada>, b: Partial<Pelada>): string[] {
+  const l: string[] = []
+  const t = (v: string | null | undefined) => (v && v.trim() ? v : '—')
+  if (a.nome !== b.nome) l.push(`Nome: ${t(a.nome)} → ${t(b.nome)}`)
+  if (a.dia_semana !== b.dia_semana) l.push(`Dia da semana: ${DIAS[a.dia_semana ?? 0]} → ${DIAS[b.dia_semana ?? 0]}`)
+  if ((a.horario ?? '').slice(0, 5) !== (b.horario ?? '').slice(0, 5)) l.push(`Horário: ${formatarHora(a.horario ?? '00:00')} → ${formatarHora(b.horario ?? '00:00')}`)
+  if ((a.local ?? null) !== (b.local ?? null)) l.push(`Local: ${t(a.local)} → ${t(b.local)}`)
+  if ((a.limite_jogadores ?? null) !== (b.limite_jogadores ?? null)) l.push(`Limite de jogadores: ${a.limite_jogadores ?? 'sem limite'} → ${b.limite_jogadores ?? 'sem limite'}`)
+  if (Number(a.valor_avulso) !== Number(b.valor_avulso)) l.push(`Valor por jogo: ${moeda(Number(a.valor_avulso))} → ${moeda(Number(b.valor_avulso))}`)
+  if (Boolean(a.goleiros_isentos) !== Boolean(b.goleiros_isentos)) l.push(`Goleiros isentos: ${a.goleiros_isentos ? 'sim' : 'não'} → ${b.goleiros_isentos ? 'sim' : 'não'}`)
+  if ((a.latitude ?? null) !== (b.latitude ?? null) || (a.longitude ?? null) !== (b.longitude ?? null)) l.push(`Local da previsão do tempo: ${t(a.cidade)} → ${t(b.cidade)}`)
+  return l
+}
+
+/** Perguntado ao editar a pelada: as mudanças valem também para os próximos jogos já agendados? */
+function AplicarAosProximos({ mudancas, total, diaMuda, salvando, erro, onAplicar, onManter, onVoltar }: {
+  mudancas: string[]; total: number; diaMuda: boolean; salvando: boolean; erro: unknown
+  onAplicar: () => void; onManter: () => void; onVoltar: () => void
+}) {
+  return (
+    <Modal titulo="Aplicar aos próximos jogos?" onFechar={onVoltar}>
+      <div className="form">
+        <span>Você alterou o modelo da pelada:</span>
+        <ul className="passos">{mudancas.map((m) => <li key={m}>{m}</li>)}</ul>
+        <span>
+          Há <strong>{total} {total === 1 ? 'jogo agendado' : 'jogos agendados'}</strong> ainda por acontecer. Quer aplicar essas mudanças neles também?
+        </span>
+        <span className="muted">
+          {diaMuda && 'Os jogos regulares são movidos para o novo dia da semana, na mesma semana. '}
+          Substitui horário, local, valor e limite desses jogos, inclusive ajustes feitos neles. <strong>Jogos já realizados</strong> e jogos
+          extras (em outros dias) <strong>nunca são alterados</strong>.
+        </span>
+        <Erro erro={erro} />
+        <button className="btn" disabled={salvando} onClick={onAplicar}>Aplicar aos {total} próximos {total === 1 ? 'jogo' : 'jogos'}</button>
+        <button className="btn sec" disabled={salvando} onClick={onManter}>Salvar só a pelada (manter os jogos como estão)</button>
+        <button className="btn sec peq" disabled={salvando} onClick={onVoltar}>Voltar</button>
+      </div>
+    </Modal>
+  )
+}
+
+/** A pelada é só um modelo: excluir NUNCA apaga jogos já realizados; os próximos são opcionais. */
+function ExcluirPelada({ pelada, onFechar, onExcluida }: { pelada: Pelada; onFechar: () => void; onExcluida: () => void }) {
+  const { data: jogos = [], isLoading } = useJogosDaPelada(pelada.id)
+  const excluir = useExcluirPelada()
+  const realizados = jogos.filter((j) => j.status === 'realizado').length
+  const proximos = jogos.filter(aindaNaoComecou).length
+  const confirmar = (apagarProximos: boolean) => excluir.mutate({ id: pelada.id, apagarProximos }, { onSuccess: onExcluida })
+
+  return (
+    <Modal titulo={`Excluir “${pelada.nome}”?`} onFechar={onFechar}>
+      <div className="form">
+        {isLoading && <Spinner />}
+        <span className="muted">A pelada é só o modelo usado para criar jogos.</span>
+        <span>
+          ✅ <strong>{realizados} {realizados === 1 ? 'jogo já realizado' : 'jogos já realizados'}</strong> continuam no histórico, com placar, escalações,
+          votos e pagamentos, sem nenhuma mudança.
+        </span>
+        {pelada.gerar_proximo_dias_antes != null && <span className="muted">A criação automática de jogos desta pelada deixa de existir.</span>}
+        <Erro erro={excluir.error} />
+        {proximos > 0 ? (
+          <>
+            <span>Há <strong>{proximos} {proximos === 1 ? 'próximo jogo agendado' : 'próximos jogos agendados'}</strong>. O que fazer com {proximos === 1 ? 'ele' : 'eles'}?</span>
+            <button className="btn perigo" disabled={excluir.isPending} onClick={() => confirmar(true)}>
+              Excluir a pelada e os {proximos} próximos {proximos === 1 ? 'jogo' : 'jogos'}
+            </button>
+            <button className="btn sec" disabled={excluir.isPending} onClick={() => confirmar(false)}>
+              Excluir só a pelada (manter os {proximos} próximos {proximos === 1 ? 'jogo' : 'jogos'})
+            </button>
+          </>
+        ) : (
+          <button className="btn perigo" disabled={excluir.isPending || isLoading} onClick={() => confirmar(false)}>Excluir pelada</button>
+        )}
+        <button className="btn sec peq" disabled={excluir.isPending} onClick={onFechar}>Cancelar</button>
+      </div>
+    </Modal>
   )
 }

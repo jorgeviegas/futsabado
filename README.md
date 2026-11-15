@@ -112,6 +112,16 @@ Abra a URL no celular → Chrome: **Instalar app / Adicionar à tela inicial** �
   então, quando a diferença é pequena, quem jogou mais fica acima. Ajuste o mínimo e o peso nos parâmetros da função
   `ranking_goleiros` (`p_minimo_pct`, `p_peso`).
 
+## Peladas são modelos; jogos são independentes
+
+- Cada **jogo guarda uma cópia** dos dados da pelada (nome, limite de jogadores, goleiros isentos, local da previsão do tempo,
+  horário, local e valor). Por isso **excluir ou editar a pelada nunca altera jogos já realizados** (placar, escalações, votos e
+  pagamentos ficam intactos). Jogos cuja pelada foi excluída continuam no histórico normalmente.
+- **Excluir uma pelada** pergunta o que fazer com os próximos jogos agendados: excluí-los junto ou mantê-los.
+- **Editar uma pelada** (horário, dia da semana, local, valor, limite, nome...) pergunta se vale também para os próximos jogos
+  agendados. Ao aplicar, só os jogos regulares (no dia da semana da pelada) são atualizados e, se o dia mudou, movidos na mesma
+  semana; jogos extras e realizados não são tocados. Sem aplicar, as mudanças valem só para os jogos criados daqui para frente.
+
 ## Automação, avisos e Pix
 
 - **Próximo jogo automático:** na pelada, marque "Gerar o próximo jogo automaticamente" e informe quantos dias antes da data

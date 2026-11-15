@@ -20,7 +20,7 @@ export default function PosJogo({ jogo, jogadores, participantes, funcoes, pagos
   const s = jogo.sorteio
   const temPlacar = jogo.placar_branco != null && jogo.placar_preto != null
   const v = jogo.time_vencedor
-  const isentos = Boolean(jogo.peladas?.goleiros_isentos)
+  const isentos = jogo.goleiros_isentos
 
   return (
     <div className="card">

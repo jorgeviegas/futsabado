@@ -69,7 +69,7 @@ function Resultados() {
     <>
       {data.map((j) => (
         <Link key={j.id} to={`/jogo/${j.id}`} className="card link">
-          <div className="muted">{formatarData(j.data)} · {j.peladas?.nome ?? 'Pelada'}</div>
+          <div className="muted">{formatarData(j.data)} · {j.pelada_nome ?? 'Pelada'}</div>
           <Placar jogo={j} />
         </Link>
       ))}
@@ -102,14 +102,14 @@ function CartaoJogo({ jogo, participantes, pres, destaque = false }: {
 }) {
   const { eu } = useAuth()
   const { data: liberaEm } = useLiberacao(jogo.status === 'agendado' ? jogo.id : undefined)
-  const limite = jogo.peladas?.limite_jogadores
+  const limite = jogo.limite_jogadores
   const minha = pres?.find((r) => r.jogo_id === jogo.id && r.jogador_id === eu?.id)?.status
   const bloqueado = jogo.status === 'agendado' && !confirmacaoLiberada(liberaEm)
 
   return (
     <Link to={`/jogo/${jogo.id}`} className="card link">
       <div className="linha entre">
-        <h3>{jogo.peladas?.nome ?? 'Pelada'}</h3>
+        <h3>{jogo.pelada_nome ?? 'Pelada'}</h3>
         {jogo.status === 'cancelado' && <span className="chip erro">Cancelado</span>}
         {jogo.status === 'realizado' && <span className="chip">Realizado</span>}
         {jogo.status === 'agendado' && bloqueado && <span className="chip aviso">Confirmação em {formatarData(liberaEm!)}</span>}

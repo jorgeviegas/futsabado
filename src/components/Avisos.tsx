@@ -97,7 +97,7 @@ export default function Avisos() {
       avisos.push({
         chave: `voto-${j.id}`, icone: '⭐', destaque: true,
         titulo: 'Vote no craque do jogo!',
-        detalhe: `${j.peladas?.nome ?? 'Pelada'} · ${formatarData(j.data)}`,
+        detalhe: `${j.pelada_nome ?? 'Pelada'} · ${formatarData(j.data)}`,
         to: `/jogo/${j.id}`,
       })
     }
@@ -108,7 +108,7 @@ export default function Avisos() {
     avisos.push({
       chave: `pres-${proximo.id}`, icone: '🙋',
       titulo: 'Confirme sua presença',
-      detalhe: `${proximo.peladas?.nome ?? 'Pelada'} · ${formatarData(proximo.data)}`,
+      detalhe: `${proximo.pelada_nome ?? 'Pelada'} · ${formatarData(proximo.data)}`,
       to: `/jogo/${proximo.id}`,
     })
   }
@@ -119,7 +119,7 @@ export default function Avisos() {
       avisos.push({
         chave: `enc-${j.id}`, icone: '✅', destaque: true,
         titulo: 'Encerre o jogo: placar e faltantes',
-        detalhe: `${j.peladas?.nome ?? 'Pelada'} · ${formatarData(j.data)}`,
+        detalhe: `${j.pelada_nome ?? 'Pelada'} · ${formatarData(j.data)}`,
         to: `/jogo/${j.id}`,
       }),
     )
@@ -128,7 +128,7 @@ export default function Avisos() {
       avisos.push({
         chave: `placar-${j.id}`, icone: '📝', destaque: true,
         titulo: 'Registre o placar e os faltantes',
-        detalhe: `${j.peladas?.nome ?? 'Pelada'} · ${formatarData(j.data)}`,
+        detalhe: `${j.pelada_nome ?? 'Pelada'} · ${formatarData(j.data)}`,
         to: `/jogo/${j.id}`,
       }),
     )
@@ -137,7 +137,7 @@ export default function Avisos() {
       avisos.push({
         chave: `fechar-${j.id}`, icone: '🔒',
         titulo: 'Votação aberta: encerre para revelar o craque',
-        detalhe: `${j.peladas?.nome ?? 'Pelada'} · ${formatarData(j.data)}`,
+        detalhe: `${j.pelada_nome ?? 'Pelada'} · ${formatarData(j.data)}`,
         to: `/jogo/${j.id}`,
       }),
     )

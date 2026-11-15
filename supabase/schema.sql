@@ -263,6 +263,26 @@ create table if not exists public.push_fila (
 );
 create index if not exists push_fila_pendentes_idx on public.push_fila (criado_em) where enviado_em is null;
 
+-- v13: a pelada é só um MODELO para criar jogos. Cada jogo guarda uma CÓPIA do que precisa (nome, limite de
+-- jogadores, goleiros isentos, local do clima) e a ligação com a pelada é opcional: apagar ou editar a pelada
+-- não mexe em jogos que já foram realizados.
+alter table public.jogos alter column pelada_id drop not null;
+alter table public.jogos drop constraint if exists jogos_pelada_id_fkey;
+alter table public.jogos add constraint jogos_pelada_id_fkey
+  foreign key (pelada_id) references public.peladas(id) on delete set null;
+alter table public.jogos add column if not exists pelada_nome text;
+alter table public.jogos add column if not exists limite_jogadores int;
+alter table public.jogos add column if not exists goleiros_isentos boolean not null default false;
+alter table public.jogos add column if not exists latitude numeric(9,6);
+alter table public.jogos add column if not exists longitude numeric(9,6);
+alter table public.jogos add column if not exists cidade text;
+-- jogos já existentes ficam com a cópia dos dados atuais da pelada (só os que ainda não têm cópia)
+update public.jogos g
+   set pelada_nome = p.nome, limite_jogadores = p.limite_jogadores, goleiros_isentos = p.goleiros_isentos,
+       latitude = p.latitude, longitude = p.longitude, cidade = p.cidade
+  from public.peladas p
+ where g.pelada_id = p.id and g.pelada_nome is null;
+
 -- Caixa do time: entradas e saídas avulsas (as mensalidades/jogos pagos entram automaticamente no extrato).
 create table if not exists public.caixa_lancamentos (
   id          uuid primary key default gen_random_uuid(),
@@ -449,8 +469,8 @@ declare
   v_info record;
   v_dias text[] := array['dom','seg','ter','qua','qui','sex','sáb'];
 begin
-  select p.limite_jogadores into v_limite
-    from public.jogos j join public.peladas p on p.id = j.pelada_id
+  select j.limite_jogadores into v_limite
+    from public.jogos j
    where j.id = p_jogo_id and j.status = 'agendado'
      and (j.data + j.horario) > (now() at time zone 'America/Sao_Paulo');  -- depois do início, ninguém é promovido
   if not found then
@@ -467,8 +487,8 @@ begin
     v_n := v_n + 1;
 
     -- push: "você entrou no jogo" (vale para qualquer vaga liberada: cancelamento, convidado removido, limite maior...)
-    select g.data, g.horario, pe.nome into v_info
-      from public.jogos g join public.peladas pe on pe.id = g.pelada_id where g.id = p_jogo_id;
+    select g.data, g.horario, coalesce(g.pelada_nome, 'Pelada') as nome into v_info
+      from public.jogos g where g.id = p_jogo_id;
     perform public.push_enfileirar(
       v_prox, 'vaga_lista_espera', '✅ Você entrou no jogo!',
       format('Abriu uma vaga e você saiu da lista de espera: %s · %s, %s às %s.',
@@ -490,8 +510,8 @@ begin
   if new.status = 'confirmado' and (tg_op = 'INSERT' or old.status <> 'confirmado') and not public.is_admin()
      and not exists (select 1 from public.presencas x
                       where x.jogo_id = new.jogo_id and x.jogador_id = new.jogador_id and x.status = 'confirmado') then
-    select p.limite_jogadores into v_limite
-      from public.jogos j join public.peladas p on p.id = j.pelada_id
+    select j.limite_jogadores into v_limite
+      from public.jogos j
      where j.id = new.jogo_id;
     if v_limite is not null and public.vagas_ocupadas(new.jogo_id, new.jogador_id) >= v_limite then
       new.status := 'espera';
@@ -561,8 +581,8 @@ begin
     return null;
   end if;
   if not public.is_admin() then
-    select p.limite_jogadores into v_limite
-      from public.jogos j join public.peladas p on p.id = j.pelada_id
+    select j.limite_jogadores into v_limite
+      from public.jogos j
      where j.id = new.jogo_id;
     if v_limite is not null and public.vagas_ocupadas(new.jogo_id) >= v_limite then
       raise exception 'A lista está cheia. Entre na lista de espera.';
@@ -581,25 +601,51 @@ create trigger convidados_vaga_del
   after delete on public.convidados
   for each row execute function public.convidado_vaga();
 
--- Limite de jogadores aumentado: a lista de espera avança nos jogos agendados da pelada.
-create or replace function public.pelada_limite_mudou()
+-- Limite de jogadores aumentado (ou retirado) em um jogo: a lista de espera avança.
+create or replace function public.jogo_limite_mudou()
 returns trigger language plpgsql security definer set search_path = public as $$
-declare
-  v_jogo uuid;
 begin
-  if new.limite_jogadores is distinct from old.limite_jogadores then
-    for v_jogo in select id from public.jogos where pelada_id = new.id and status = 'agendado' loop
-      perform public.promover_espera(v_jogo);
-    end loop;
-  end if;
+  perform public.promover_espera(new.id);
   return null;
 end;
 $$;
 
+drop trigger if exists jogos_limite_mudou on public.jogos;
+create trigger jogos_limite_mudou
+  after update of limite_jogadores on public.jogos
+  for each row when (new.limite_jogadores is distinct from old.limite_jogadores)
+  execute function public.jogo_limite_mudou();
+
+-- (v13) o gatilho antigo ficava na pelada; agora cada jogo tem o próprio limite
 drop trigger if exists peladas_limite_mudou on public.peladas;
-create trigger peladas_limite_mudou
-  after update on public.peladas
-  for each row execute function public.pelada_limite_mudou();
+drop function if exists public.pelada_limite_mudou();
+
+-- Ao criar um jogo a partir de uma pelada, copia os dados dela para o jogo (nome, limite, isenção de goleiros, clima, valor).
+create or replace function public.jogo_copiar_da_pelada()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  pe public.peladas;
+begin
+  if new.pelada_id is not null and new.pelada_nome is null then
+    select * into pe from public.peladas where id = new.pelada_id;
+    if found then
+      new.pelada_nome       := pe.nome;
+      new.limite_jogadores  := coalesce(new.limite_jogadores, pe.limite_jogadores);
+      new.goleiros_isentos  := pe.goleiros_isentos;
+      new.latitude          := coalesce(new.latitude, pe.latitude);
+      new.longitude         := coalesce(new.longitude, pe.longitude);
+      new.cidade            := coalesce(new.cidade, pe.cidade);
+      new.valor             := coalesce(new.valor, pe.valor_avulso);
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists jogos_copiar_da_pelada on public.jogos;
+create trigger jogos_copiar_da_pelada
+  before insert on public.jogos
+  for each row execute function public.jogo_copiar_da_pelada();
 
 -- ---------------------------------------------------------------------
 -- ROW LEVEL SECURITY
@@ -1327,8 +1373,8 @@ begin
   -- 1) confirmação de presença aberta
   if v_agora::time >= time '09:00' then
     for g in
-      select ge.id, ge.data, ge.horario, ge.created_at, pe.nome, public.liberacao_confirmacao(ge.id) as lib
-        from public.jogos ge join public.peladas pe on pe.id = ge.pelada_id
+      select ge.id, ge.data, ge.horario, ge.created_at, coalesce(ge.pelada_nome, 'Pelada') as nome, public.liberacao_confirmacao(ge.id) as lib
+        from public.jogos ge
        where ge.status = 'agendado' and (ge.data + ge.horario) > v_agora
     loop
       -- só avisa quando acabou de abrir (hoje ou ontem); sem jogo anterior, vale desde a criação do jogo
@@ -1350,8 +1396,8 @@ begin
 
   -- 2) lembrete de véspera: de 12 h antes até o início do jogo
   for g in
-    select ge.id, ge.data, ge.horario, ge.local, pe.nome
-      from public.jogos ge join public.peladas pe on pe.id = ge.pelada_id
+    select ge.id, ge.data, ge.horario, ge.local, coalesce(ge.pelada_nome, 'Pelada') as nome
+      from public.jogos ge
      where ge.status = 'agendado'
        and (ge.data + ge.horario) > v_agora
        and (ge.data + ge.horario) - interval '12 hours' <= v_agora
@@ -1445,6 +1491,81 @@ begin
 end;
 $$;
 
+-- Admin: exclui a pelada (que é só um modelo). Jogos já realizados NUNCA são apagados: ficam no histórico, sem pelada.
+-- Com p_apagar_proximos, apaga também os próximos jogos agendados (que ainda não começaram); sem ele, eles ficam.
+create or replace function public.excluir_pelada(p_pelada_id uuid, p_apagar_proximos boolean default false)
+returns table (jogos_apagados int, jogos_mantidos int)
+language plpgsql security definer set search_path = public as $$
+declare
+  v_apagados int := 0;
+  v_mantidos int;
+begin
+  if not public.is_admin() then
+    raise exception 'Apenas administradores podem excluir peladas';
+  end if;
+  if not exists (select 1 from public.peladas where id = p_pelada_id) then
+    raise exception 'Pelada não encontrada';
+  end if;
+
+  if p_apagar_proximos then
+    delete from public.jogos
+     where pelada_id = p_pelada_id and status = 'agendado'
+       and (data + horario) > (now() at time zone 'America/Sao_Paulo');
+    get diagnostics v_apagados = row_count;
+  end if;
+
+  select count(*) into v_mantidos from public.jogos where pelada_id = p_pelada_id;
+  delete from public.peladas where id = p_pelada_id;   -- jogos restantes ficam (pelada_id vira nulo)
+  return query select v_apagados, v_mantidos;
+end;
+$$;
+
+-- Admin: aplica os dados ATUAIS da pelada (horário, local, valor, limite, nome, clima, isenção de goleiros) aos próximos
+-- jogos agendados REGULARES (no dia da semana da pelada; jogos extras, em outros dias, não são alterados). Se o dia da semana mudou (p_dia_antigo), move cada jogo regular para o novo dia, no deslocamento mais
+-- curto (de -3 a +3 dias), desde que a nova data seja futura e esteja livre. Jogos realizados nunca são tocados.
+create or replace function public.sincronizar_jogos_da_pelada(p_pelada_id uuid, p_dia_antigo int default null)
+returns int language plpgsql security definer set search_path = public as $$
+declare
+  v_pel public.peladas;
+  v_agora timestamp := now() at time zone 'America/Sao_Paulo';
+  v_n int := 0;
+  v_nova date;
+  g record;
+begin
+  if not public.is_admin() then
+    raise exception 'Apenas administradores podem alterar jogos';
+  end if;
+  select * into v_pel from public.peladas where id = p_pelada_id;
+  if not found then
+    raise exception 'Pelada não encontrada';
+  end if;
+
+  for g in
+    select j.id, j.data from public.jogos j
+     where j.pelada_id = p_pelada_id and j.status = 'agendado' and (j.data + j.horario) > v_agora
+       and extract(dow from j.data)::int = coalesce(p_dia_antigo, v_pel.dia_semana)   -- só jogos regulares; "jogos extras" ficam como estão
+     order by j.data
+  loop
+    v_nova := g.data;
+    if p_dia_antigo is not null and p_dia_antigo <> v_pel.dia_semana and extract(dow from g.data)::int = p_dia_antigo then
+      v_nova := g.data + (((v_pel.dia_semana - p_dia_antigo + 10) % 7) - 3);
+      if (v_nova + v_pel.horario) <= v_agora
+         or exists (select 1 from public.jogos x where x.pelada_id = p_pelada_id and x.data = v_nova and x.id <> g.id) then
+        v_nova := g.data;   -- não dá para mover (data passada ou ocupada): mantém a data
+      end if;
+    end if;
+
+    update public.jogos
+       set data = v_nova, horario = v_pel.horario, local = v_pel.local, valor = v_pel.valor_avulso,
+           pelada_nome = v_pel.nome, limite_jogadores = v_pel.limite_jogadores, goleiros_isentos = v_pel.goleiros_isentos,
+           latitude = v_pel.latitude, longitude = v_pel.longitude, cidade = v_pel.cidade
+     where id = g.id;
+    v_n := v_n + 1;
+  end loop;
+  return v_n;
+end;
+$$;
+
 -- Permissões de execução das funções
 revoke execute on function public.gerar_jogos(uuid, int) from public, anon;
 revoke execute on function public.resultado_votacao(uuid) from public, anon;
@@ -1454,6 +1575,10 @@ revoke execute on function public.ranking_vencedores(int) from public, anon;
 revoke execute on function public.jogos_no_ano(int) from public, anon;
 revoke execute on function public.marcar_pagamento(uuid, text, date, uuid, numeric, boolean, uuid) from public, anon;
 revoke execute on function public.processar_jogos() from public, anon;
+revoke execute on function public.excluir_pelada(uuid, boolean) from public, anon;
+revoke execute on function public.sincronizar_jogos_da_pelada(uuid, int) from public, anon;
+revoke execute on function public.jogo_limite_mudou() from public, anon, authenticated;
+revoke execute on function public.jogo_copiar_da_pelada() from public, anon, authenticated;
 revoke execute on function public.push_enfileirar(uuid, text, text, text, text, text) from public, anon, authenticated;
 revoke execute on function public.push_gerar_agendados(timestamp) from public, anon, authenticated;
 revoke execute on function public.push_craque() from public, anon, authenticated;
@@ -1481,6 +1606,8 @@ grant execute on function public.ranking_vencedores(int) to authenticated;
 grant execute on function public.jogos_no_ano(int) to authenticated;
 grant execute on function public.marcar_pagamento(uuid, text, date, uuid, numeric, boolean, uuid) to authenticated;
 grant execute on function public.processar_jogos() to authenticated;
+grant execute on function public.excluir_pelada(uuid, boolean) to authenticated;
+grant execute on function public.sincronizar_jogos_da_pelada(uuid, int) to authenticated;
 grant execute on function public.push_registrar(text, text, text, text) to authenticated;
 grant execute on function public.push_teste() to authenticated;
 grant execute on function public.gerar_jogos_automaticos() to authenticated;

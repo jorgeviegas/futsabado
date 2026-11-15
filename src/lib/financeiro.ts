@@ -6,7 +6,8 @@ interface JogoRef {
   data: string
   valor: number | null
   sorteio?: Sorteio | null
-  peladas: { nome: string; valor_avulso: number; goleiros_isentos?: boolean } | null
+  pelada_nome: string | null
+  goleiros_isentos?: boolean
 }
 
 /** Presença confirmada em jogo realizado (quem jogou). */
@@ -40,7 +41,7 @@ export interface Cobranca {
   data: string
 }
 
-const valorDoJogo = (j: JogoRef) => Number(j.valor ?? j.peladas?.valor_avulso ?? 0)
+const valorDoJogo = (j: JogoRef) => Number(j.valor ?? 0)
 
 /**
  * Pelada com "goleiros isentos": quem jogou no gol não paga aquele jogo.
@@ -48,7 +49,7 @@ const valorDoJogo = (j: JogoRef) => Number(j.valor ?? j.peladas?.valor_avulso ??
  * (que não avisou que jogaria na linha).
  */
 function isentoPorGol(jogo: JogoRef, id: string, goleiroPorPosicao: boolean): boolean {
-  if (!jogo.peladas?.goleiros_isentos) return false
+  if (!jogo.goleiros_isentos) return false
   const s = jogo.sorteio
   if (s) return [...s.branco, ...s.preto].some((e) => e.id === id && e.slot === 'GOL')
   return goleiroPorPosicao

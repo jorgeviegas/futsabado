@@ -62,7 +62,7 @@ export default function JogoDetalhe() {
   const participantes = [...confirmados, ...convidadosComoJogador]
   const liberada = isAdmin || confirmacaoLiberada(liberaEm)
   const ausentes = jogadores.filter((j) => pres.some((p) => p.jogador_id === j.id && p.status === 'ausente'))
-  const limite = jogo.peladas?.limite_jogadores
+  const limite = jogo.limite_jogadores
   const cheio = Boolean(limite && participantes.length >= limite)
   const funcoes: Record<string, FuncaoGoleiro> = Object.fromEntries(pres.filter((p) => p.funcao).map((p) => [p.jogador_id, p.funcao!]))
   const naFila = minha === 'espera'
@@ -95,7 +95,7 @@ export default function JogoDetalhe() {
       <Link to="/" className="muted">← Voltar</Link>
       <div className="card">
         <div className="linha entre">
-          <h1>{jogo.peladas?.nome ?? 'Pelada'}</h1>
+          <h1>{jogo.pelada_nome ?? 'Pelada'}</h1>
           {jogo.status !== 'agendado' && (
             <span className={`chip ${jogo.status === 'cancelado' ? 'erro' : ''}`}>
               {jogo.status === 'cancelado' ? 'Cancelado' : 'Realizado'}
@@ -106,7 +106,7 @@ export default function JogoDetalhe() {
           {formatarData(jogo.data)} às {formatarHora(jogo.horario)}{jogo.local && ` · ${jogo.local}`}
         </div>
         <ClimaJogo jogo={jogo} grande />
-        {jogo.valor != null && <div className="muted">💵 {moeda(jogo.valor)} por jogador{jogo.peladas?.goleiros_isentos ? ' · goleiros isentos 🧤' : ''}</div>}
+        {jogo.valor != null && <div className="muted">💵 {moeda(jogo.valor)} por jogador{jogo.goleiros_isentos ? ' · goleiros isentos 🧤' : ''}</div>}
         {jogo.observacoes && <div className="muted">{jogo.observacoes}</div>}
       </div>
 

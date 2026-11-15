@@ -51,25 +51,48 @@ export const usePeladas = () =>
       ok(await supabase.from('peladas').select('*').order('dia_semana').order('horario')) as Pelada[],
   })
 
+/**
+ * Salva a pelada (que é só um modelo). Com `aplicarAosProximos`, copia horário, local, valor, limite, nome etc. para os
+ * próximos jogos agendados (movendo os jogos regulares se o dia da semana mudou). Jogos realizados nunca são alterados.
+ */
 export const useSalvarPelada = () =>
   useAcao(
-    async (p: Partial<Pelada> & { nome: string }) => {
+    async (v: { pelada: Partial<Pelada> & { nome: string }; aplicarAosProximos?: boolean; diaAntigo?: number | null }) => {
+      const p = v.pelada
       ok(
         p.id
           ? await supabase.from('peladas').update(p).eq('id', p.id)
           : await supabase.from('peladas').insert(p),
       )
+      if (v.aplicarAosProximos && p.id) {
+        ok(await supabase.rpc('sincronizar_jogos_da_pelada', { p_pelada_id: p.id, p_dia_antigo: v.diaAntigo ?? null }))
+      }
       // com a geração automática ligada, já cria o próximo jogo se estiver na hora
       await gerarJogosAutomaticos()
     },
-    [['peladas'], ['jogos']],
+    [['peladas'], ['jogos'], ['jogo'], ['presencas']],
   )
 
+/**
+ * Exclui a pelada. Os jogos já realizados ficam no histórico (sem pelada). Com `apagarProximos`, apaga também
+ * os próximos jogos agendados; sem ele, eles ficam.
+ */
 export const useExcluirPelada = () =>
   useAcao(
-    async (id: string) => ok(await supabase.from('peladas').delete().eq('id', id)),
-    [['peladas'], ['jogos']],
+    async (v: { id: string; apagarProximos: boolean }) =>
+      ok(await supabase.rpc('excluir_pelada', { p_pelada_id: v.id, p_apagar_proximos: v.apagarProximos })) as { jogos_apagados: number; jogos_mantidos: number }[],
+    [['peladas'], ['jogos'], ['jogo'], ['presencas'], ['convidados'], ['cobrancas'], ['pagosJogo']],
   )
+
+/** Jogos criados a partir de uma pelada (para contar os realizados e os próximos). */
+export const useJogosDaPelada = (peladaId: string | undefined) =>
+  useQuery({
+    queryKey: ['jogos', 'daPelada', peladaId],
+    enabled: Boolean(peladaId),
+    queryFn: async () =>
+      ok(await supabase.from('jogos').select('id, data, horario, status').eq('pelada_id', peladaId!)) as
+        { id: string; data: string; horario: string; status: 'agendado' | 'realizado' | 'cancelado' }[],
+  })
 
 export const useGerarJogos = () =>
   useAcao(
@@ -79,7 +102,8 @@ export const useGerarJogos = () =>
   )
 
 // ---------- Jogos ----------
-const JOGO_SELECT = '*, peladas(nome, limite_jogadores, valor_avulso, latitude, longitude, cidade, goleiros_isentos)'
+// o jogo carrega uma cópia dos dados da pelada (nome, limite, isenção de goleiros, local do clima): não depende dela
+const JOGO_SELECT = '*'
 
 /** Próximo jogo (o mais próximo ainda por acontecer). */
 export const useProximoJogo = () =>
@@ -145,7 +169,7 @@ export const useJogo = (id: string | undefined) =>
 export const useAtualizarJogo = () =>
   useAcao(
     async (j: Partial<Jogo> & { id: string }) => {
-      const { id, peladas: _p, ...resto } = j
+      const { id, ...resto } = j
       return ok(await supabase.from('jogos').update(resto).eq('id', id))
     },
     [['jogos'], ['jogo'], ['ranking'], ['resultado'], ['jogosNoAno'], ['cobrancas'], ['presencas']],
@@ -347,7 +371,7 @@ export const useMarcarPagamento = () =>
     [['cobrancas'], ['caixa'], ['pagosJogo']],
   )
 
-const JOGO_REF = 'jogos!inner(id, data, valor, status, sorteio, peladas(nome, valor_avulso, goleiros_isentos))'
+const JOGO_REF = 'jogos!inner(id, data, valor, status, sorteio, pelada_nome, goleiros_isentos)'
 
 /**
  * Cobranças do ano. Sem `jogadorId` (admin): de todos. Com `jogadorId`: só as dele

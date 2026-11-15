@@ -119,12 +119,12 @@ export async function buscarLugar(nome: string): Promise<Lugar[]> {
   }))
 }
 
-type JogoClima = Pick<Jogo, 'data' | 'horario' | 'status' | 'peladas'>
+type JogoClima = Pick<Jogo, 'data' | 'horario' | 'status' | 'latitude' | 'longitude'>
 
 /** Previsão para a data e a hora do jogo, só para jogos que ainda vão acontecer e estão no alcance da previsão. */
 export function useClima(jogo: JogoClima | null | undefined) {
-  const lat = jogo?.peladas?.latitude
-  const lon = jogo?.peladas?.longitude
+  const lat = jogo?.latitude
+  const lon = jogo?.longitude
   const dias = jogo ? diasAte(jogo.data) : -1
   const hora = jogo ? horaDoJogo(jogo.horario) : 0
   const temLocal = lat != null && lon != null

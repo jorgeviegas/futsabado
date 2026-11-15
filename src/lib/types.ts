@@ -67,7 +67,8 @@ export interface Sorteio {
 
 export interface Jogo {
   id: string
-  pelada_id: string
+  /** Pelada (modelo) de origem; nulo se ela foi excluída. */
+  pelada_id: string | null
   data: string
   horario: string
   local: string | null
@@ -82,7 +83,13 @@ export interface Jogo {
   sorteio: Sorteio | null
   time_vencedor: TimeCor | 'empate' | null
   observacoes: string | null
-  peladas?: Pick<Pelada, 'nome' | 'limite_jogadores' | 'valor_avulso' | 'latitude' | 'longitude' | 'cidade' | 'goleiros_isentos'> | null
+  /** Cópia dos dados da pelada no momento em que o jogo foi criado: a pelada é só um modelo e pode mudar ou ser apagada. */
+  pelada_nome: string | null
+  limite_jogadores: number | null
+  goleiros_isentos: boolean
+  latitude: number | null
+  longitude: number | null
+  cidade: string | null
 }
 
 /** Goleiro com posição secundária escolhe se joga no gol ou na linha. */

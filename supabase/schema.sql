@@ -157,10 +157,7 @@ alter table public.jogos add constraint jogos_placar_check
 alter table public.jogos add column if not exists votacao_iniciada_em timestamptz;
 update public.jogos set votacao_iniciada_em = now() where status = 'realizado' and votacao_iniciada_em is null;
 
--- 'faltou' = confirmou, mas não compareceu (removido pelo admin)
-alter table public.presencas drop constraint if exists presencas_status_check;
-alter table public.presencas add constraint presencas_status_check
-  check (status in ('confirmado','talvez','ausente','faltou'));
+-- (os status de presença válidos — inclusive 'faltou' e 'espera' — são definidos uma única vez, mais abaixo, no bloco v7)
 
 -- Convidados avulsos: qualquer jogador convida; quem convidou fica responsável pelo pagamento.
 create table if not exists public.convidados (
@@ -193,6 +190,7 @@ alter table public.peladas add constraint peladas_coord_check
 alter table public.peladas add column if not exists goleiros_isentos boolean not null default false;
 
 alter table public.presencas add column if not exists espera_desde timestamptz;
+-- status de presença: 'faltou' = confirmou e não compareceu (removido pelo admin); 'espera' = lista de espera
 alter table public.presencas drop constraint if exists presencas_status_check;
 alter table public.presencas add constraint presencas_status_check
   check (status in ('confirmado','talvez','ausente','faltou','espera'));

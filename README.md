@@ -114,6 +114,9 @@ Abra a URL no celular → Chrome: **Instalar app / Adicionar à tela inicial** �
   jogos a nota fica perto de 500. A fórmula e os pesos estão comentados na função `recalcular_scores()` do `schema.sql`.
   O **sorteio** usa o score para equilibrar os times (mantendo as posições divididas e os times com no máximo 1 jogador
   de diferença); convidados contam como 500.
+- **360 view (admin):** o botão **👁 360 view**, ao lado de *Sair*, mostra o app como um jogador comum (sem abas, botões e
+  dados de admin) e tem uma faixa com o atalho **Voltar à visão normal**. É só a interface: o que o admin fizer ali continua
+  valendo como admin no banco. Ao sair da conta, volta ao normal.
 - **Gols e assistências:** ao encerrar o jogo (ou reabrir o placar), o admin lista quem jogou, marca quem faltou e usa os
   contadores ⚽ e 🍽️ de cada jogador. Só o admin altera esses números.
 - **Rankings:** top 5 de craques, **artilheiros ⚽** e **garçons 🍽️ (assistências)** do ano, de maiores vencedores, de **assiduidade** (mais presenças no ano) e de **goleiros menos
@@ -192,3 +195,21 @@ scripts/gen-icons.py regenera logo e ícones PNG a partir de assets/logo-origina
 ## Scripts
 
 `npm run dev` · `npm run build` · `npm run preview` · `npm run lint`
+
+
+## Backup do banco
+
+O plano gratuito do Supabase **não tem backup automático**. Use `scripts/backup.sh` de vez em quando (ex.: uma vez por mês):
+
+```bash
+export SUPABASE_DB_URL='postgresql://postgres.<REF>:<SENHA>@aws-0-<regiao>.pooler.supabase.com:5432/postgres'   # Connect → Session pooler
+./scripts/backup.sh                 # grava em ./backups (mantém os 12 mais recentes; MANTER=24 muda isso)
+./scripts/backup.sh ~/Dropbox/futsabado   # ou em outra pasta
+```
+
+Gera dois arquivos `.sql.gz`: os **dados** do app e as **contas de login**. A estrutura é o próprio `supabase/schema.sql`.
+Precisa do `pg_dump` (cliente do PostgreSQL) numa versão igual ou maior que a do projeto. **Os arquivos têm dados pessoais**:
+guarde em local privado (`backups/` já está no `.gitignore`; o repositório é público, nunca suba backups).
+
+Restaurar (projeto novo ou esvaziado): rode o `supabase/schema.sql`; depois, com `PGOPTIONS='-c session_replication_role=replica'`,
+carregue primeiro o arquivo `_contas` e depois o de dados com `gunzip -c arquivo.sql.gz | psql "$SUPABASE_DB_URL"`.

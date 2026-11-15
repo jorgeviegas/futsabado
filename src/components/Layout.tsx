@@ -7,7 +7,7 @@ import { useAuth } from '../lib/auth'
 const base = import.meta.env.BASE_URL
 
 export default function Layout() {
-  const { eu, isAdmin, sair } = useAuth()
+  const { eu, isAdmin, isAdminReal, visao360, alternarVisao360, sair } = useAuth()
   const qc = useQueryClient()
 
   // Ao abrir o app: jogos que já passaram viram "realizados" (a votação do craque abre sozinha)
@@ -32,14 +32,31 @@ export default function Layout() {
       <header className="topo">
         <img src={`${base}logo.png`} alt="" />
         <h1>FutSábado</h1>
-        <span className="muted" style={{ color: '#ffd9df' }}>
+        <span className="muted nome-topo" style={{ color: '#ffd9df' }}>
           {eu?.apelido || eu?.nome}
-          {isAdmin && ' · admin'}
+          {isAdminReal && (visao360 ? ' · 360' : ' · admin')}
         </span>
         <NavLink to="/notificacoes" className="sino" aria-label="Notificações" title="Notificações">🔔</NavLink>
+        {isAdminReal && (
+          <button
+            className="btn sec peq" onClick={alternarVisao360} aria-pressed={visao360}
+            title={visao360 ? 'Voltar à visão normal de admin' : 'Ver o app como um jogador comum'}
+          >
+            {visao360 ? '↩ Normal' : '👁 360 view'}
+          </button>
+        )}
         <button className="btn sec peq" onClick={sair}>Sair</button>
       </header>
       <main className="conteudo">
+        {visao360 && (
+          <div className="faixa-360" role="status">
+            <span className="grow">
+              👁 <strong>360 view:</strong> você está vendo o app como um jogador comum. O que você fizer aqui continua valendo
+              como administrador.
+            </span>
+            <button className="btn peq" onClick={alternarVisao360}>Voltar à visão normal</button>
+          </div>
+        )}
         <Outlet />
       </main>
       <nav className="nav" aria-label="Navegação principal">

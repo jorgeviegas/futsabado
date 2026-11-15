@@ -326,10 +326,7 @@ create table if not exists public.jogador_scores (
   detalhes      jsonb,
   atualizado_em timestamptz not null default now()
 );
-alter table public.jogador_scores enable row level security;
-drop policy if exists jogador_scores_select on public.jogador_scores;
-create policy jogador_scores_select on public.jogador_scores for select to authenticated using (public.is_admin());
--- (sem políticas de escrita: só as funções do banco gravam)
+-- (RLS e política de leitura ficam mais abaixo, depois da função is_admin())
 
 -- Caixa do time: entradas e saídas avulsas (as mensalidades/jogos pagos entram automaticamente no extrato).
 create table if not exists public.caixa_lancamentos (
@@ -1860,7 +1857,12 @@ create trigger jogos_scores
         or old.sorteio is distinct from new.sorteio)
   execute function public.jogos_atualiza_scores();
 
-select public.recalcular_scores();   -- primeira carga / sempre que o schema é reaplicado
+alter table public.jogador_scores enable row level security;
+drop policy if exists jogador_scores_select on public.jogador_scores;
+create policy jogador_scores_select on public.jogador_scores for select to authenticated using (public.is_admin());
+-- (sem políticas de escrita: só as funções do banco gravam)
+
+do $$ begin perform public.recalcular_scores(); end $$;   -- primeira carga / sempre que o schema é reaplicado
 
 -- Permissões de execução das funções
 revoke execute on function public.gerar_jogos(uuid, int) from public, anon;

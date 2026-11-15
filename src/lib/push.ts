@@ -69,6 +69,21 @@ export async function ativarPush(): Promise<void> {
   if (error) throw new Error(error.message)
 }
 
+/**
+ * Reenvia ao banco a inscrição que este aparelho JÁ tem (sem pedir permissão nem mostrar nada). Corrige o caso em que
+ * o app mostra "ativado" mas a assinatura sumiu do banco (dados apagados/restaurados) ou mudou de dono (outra conta
+ * entrou no mesmo aparelho). É idempotente: se já estiver cadastrada, só atualiza.
+ */
+export async function sincronizarPush(): Promise<void> {
+  if ((await estadoPush()) !== 'ativado') return
+  const reg = await navigator.serviceWorker.ready
+  const json = (await reg.pushManager.getSubscription())?.toJSON()
+  if (!json?.endpoint || !json.keys?.p256dh || !json.keys.auth) return
+  await supabase.rpc('push_registrar', {
+    p_endpoint: json.endpoint, p_p256dh: json.keys.p256dh, p_auth: json.keys.auth, p_user_agent: navigator.userAgent,
+  })
+}
+
 export async function desativarPush(): Promise<void> {
   const reg = await navigator.serviceWorker.ready
   const sub = await reg.pushManager.getSubscription()

@@ -3,6 +3,7 @@ import { NavLink, Outlet } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { gerarJogosAutomaticos, processarJogos } from '../lib/api'
 import { useAuth } from '../lib/auth'
+import { sincronizarPush } from '../lib/push'
 
 const base = import.meta.env.BASE_URL
 
@@ -17,6 +18,11 @@ export default function Layout() {
       if (realizados > 0 || criados > 0) qc.invalidateQueries({ queryKey: ['jogos'] })
     })
   }, [qc])
+
+  // Garante que a assinatura de push deste aparelho esteja no banco (e na conta de quem está logado)
+  useEffect(() => {
+    sincronizarPush().catch(() => {})
+  }, [])
 
   // Toque numa notificação com o app já aberto: o service worker pede para ir à tela do aviso.
   useEffect(() => {

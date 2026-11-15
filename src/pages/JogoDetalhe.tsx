@@ -206,7 +206,7 @@ export default function JogoDetalhe() {
       )}
 
       {jogo.status === 'realizado' || jogo.votacao_aberta ? (
-        <Votacao jogoId={jogo.id} aberta={jogo.votacao_aberta} confirmados={confirmados} />
+        <Votacao jogoId={jogo.id} aberta={jogo.votacao_aberta} confirmados={confirmados} convidados={convidados} />
       ) : null}
 
       {isAdmin && (
@@ -327,7 +327,7 @@ function AdminPresenca({ jogoId, jogadores, presencas }: {
   )
 }
 
-function Votacao({ jogoId, aberta, confirmados }: { jogoId: string; aberta: boolean; confirmados: Jogador[] }) {
+function Votacao({ jogoId, aberta, confirmados, convidados }: { jogoId: string; aberta: boolean; confirmados: Jogador[]; convidados: Convidado[] }) {
   const { eu, isAdmin } = useAuth()
   const { data: meuVoto } = useMeuVoto(jogoId, eu?.id)
   const { data: total = 0 } = useTotalVotos(jogoId)
@@ -348,18 +348,36 @@ function Votacao({ jogoId, aberta, confirmados }: { jogoId: string; aberta: bool
       {aberta && eu && euConfirmei && (
         <>
           <p className="muted">{meuVoto ? 'Seu voto está registrado — você pode alterá-lo.' : 'Escolha quem foi o craque (voto secreto):'}</p>
-          {candidatos.map((j) => (
-            <button
-              key={j.id}
-              className={`voto-opcao ${meuVoto?.votado_id === j.id ? 'sel' : ''}`}
-              disabled={votar.isPending}
-              onClick={() => votar.mutate({ jogo_id: jogoId, eleitor_id: eu.id, votado_id: j.id })}
-            >
-              <Avatar nome={exibir(j)} numero={j.numero_camisa} />
-              <span className="grow">{exibir(j)}</span>
-              {meuVoto?.votado_id === j.id && <span>✓</span>}
-            </button>
-          ))}
+          {candidatos.map((j) => {
+            const sel = meuVoto?.votado_id === j.id
+            return (
+              <button
+                key={j.id}
+                className={`voto-opcao ${sel ? 'sel' : ''}`}
+                disabled={votar.isPending}
+                onClick={() => votar.mutate({ jogo_id: jogoId, eleitor_id: eu.id, votado_id: j.id, votado_convidado_id: null })}
+              >
+                <Avatar nome={exibir(j)} numero={j.numero_camisa} />
+                <span className="grow">{exibir(j)}</span>
+                {sel && <span>✓</span>}
+              </button>
+            )
+          })}
+          {convidados.map((c) => {
+            const sel = meuVoto?.votado_convidado_id === c.id
+            return (
+              <button
+                key={`c_${c.id}`}
+                className={`voto-opcao ${sel ? 'sel' : ''}`}
+                disabled={votar.isPending}
+                onClick={() => votar.mutate({ jogo_id: jogoId, eleitor_id: eu.id, votado_id: null, votado_convidado_id: c.id })}
+              >
+                <Avatar nome={c.nome} />
+                <span className="grow">{c.nome} <span className="chip">convidado</span></span>
+                {sel && <span>✓</span>}
+              </button>
+            )
+          })}
           <Erro erro={votar.error} />
         </>
       )}
@@ -368,9 +386,9 @@ function Votacao({ jogoId, aberta, confirmados }: { jogoId: string; aberta: bool
         <>
           <h3>{aberta ? 'Parcial (visível só para admins)' : 'Resultado'}</h3>
           {resultado.map((r, i) => (
-            <div key={r.jogador_id} style={{ display: 'grid', gap: 4 }}>
+            <div key={`${r.convidado ? 'c' : 'j'}_${r.jogador_id}`} style={{ display: 'grid', gap: 4 }}>
               <div className="linha entre">
-                <span>{!aberta && i === 0 ? '👑 ' : ''}{exibir(r)}</span>
+                <span>{!aberta && i === 0 ? '👑 ' : ''}{exibir(r)}{r.convidado && <> <span className="chip">convidado</span></>}</span>
                 <strong>{r.votos}</strong>
               </div>
               <div className="barra"><div style={{ width: `${(r.votos / max) * 100}%` }} /></div>

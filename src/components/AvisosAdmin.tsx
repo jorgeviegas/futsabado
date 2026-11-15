@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useAvisosAvulsos, useExcluirAviso, useSalvarAviso } from '../lib/api'
+import { useAvisosAvulsos, useDestinatariosAviso, useExcluirAviso, useSalvarAviso } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { formatarData, hojeISO, somaDias } from '../lib/format'
 import { Erro, Modal } from './ui'
@@ -30,6 +30,9 @@ export default function AvisosAdmin() {
                 {formatarData(a.inicio)} → {formatarData(a.fim)}
               </span>
             </div>
+            {a.enviar_push && (
+              <span className="chip" title={a.push_enviado_em ? 'Notificação enviada' : 'Notificação será enviada'}>{a.push_enviado_em ? '🔔 enviado' : '🔔 pendente'}</span>
+            )}
             <span className={`chip ${agendado ? 'aviso' : 'ok'}`}>{agendado ? 'agendado' : 'ativo'}</span>
             <button
               className="btn perigo peq" aria-label={`Excluir aviso ${a.titulo}`} disabled={excluir.isPending}
@@ -53,6 +56,8 @@ function NovoAviso({ onFechar }: { onFechar: () => void }) {
   const [mensagem, setMensagem] = useState('')
   const [inicio, setInicio] = useState(hojeISO())
   const [fim, setFim] = useState(somaDias(hojeISO(), 7))
+  const [push, setPush] = useState(false)
+  const { data: destinatarios } = useDestinatariosAviso()
   const invalido = fim < inicio
 
   return (
@@ -63,7 +68,7 @@ function NovoAviso({ onFechar }: { onFechar: () => void }) {
           e.preventDefault()
           if (invalido) return
           salvar.mutate(
-            { titulo: titulo.trim(), mensagem: mensagem.trim() || null, inicio, fim, created_by: eu?.id },
+            { titulo: titulo.trim(), mensagem: mensagem.trim() || null, inicio, fim, enviar_push: push, created_by: eu?.id },
             { onSuccess: onFechar },
           )
         }}
@@ -81,6 +86,16 @@ function NovoAviso({ onFechar }: { onFechar: () => void }) {
             <button key={rot as string} type="button" className="btn sec peq" onClick={() => setFim(somaDias(inicio, dias as number))}>{rot}</button>
           ))}
         </div>
+        <label className="pref-linha">
+          <span className="grow">
+            <strong>🔔 Enviar notificação push aos jogadores</strong>
+            <span className="muted" style={{ display: 'block' }}>
+              {inicio > hojeISO() ? 'Será enviada no dia de início, a partir das 08h.' : 'Será enviada em até 1 minuto.'}
+              {destinatarios !== undefined && ` Chega para ${destinatarios} ${destinatarios === 1 ? 'jogador' : 'jogadores'} com notificações ativas.`}
+            </span>
+          </span>
+          <input type="checkbox" checked={push} onChange={(e) => setPush(e.target.checked)} />
+        </label>
         {invalido && <p className="erro-msg">A data final não pode ser anterior à inicial.</p>}
         <Erro erro={salvar.error} />
         <button className="btn" disabled={salvar.isPending || invalido}>Publicar aviso</button>

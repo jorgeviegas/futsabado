@@ -283,6 +283,16 @@ update public.jogos g
   from public.peladas p
  where g.pelada_id = p.id and g.pelada_nome is null;
 
+-- v14: convidados podem ser eleitos craque; avisos avulsos podem enviar push
+alter table public.votos alter column votado_id drop not null;
+alter table public.votos add column if not exists votado_convidado_id uuid references public.convidados(id) on delete cascade;
+alter table public.votos drop constraint if exists votos_um_votado_check;
+alter table public.votos add constraint votos_um_votado_check check ((votado_id is null) <> (votado_convidado_id is null));
+
+alter table public.avisos_avulsos add column if not exists enviar_push boolean not null default false;
+alter table public.avisos_avulsos add column if not exists push_enviado_em timestamptz;
+alter table public.push_preferencias add column if not exists aviso_time boolean not null default true;
+
 -- Caixa do time: entradas e saídas avulsas (as mensalidades/jogos pagos entram automaticamente no extrato).
 create table if not exists public.caixa_lancamentos (
   id          uuid primary key default gen_random_uuid(),
@@ -734,7 +744,10 @@ create policy votos_insert on public.votos for insert to authenticated
     eleitor_id = public.meu_jogador_id()
     and exists (select 1 from public.jogos j where j.id = jogo_id and j.votacao_aberta)
     and exists (select 1 from public.presencas p where p.jogo_id = votos.jogo_id and p.jogador_id = votos.eleitor_id and p.status = 'confirmado')
-    and exists (select 1 from public.presencas p where p.jogo_id = votos.jogo_id and p.jogador_id = votos.votado_id and p.status = 'confirmado')
+    and (
+      (votado_id is not null and exists (select 1 from public.presencas p where p.jogo_id = votos.jogo_id and p.jogador_id = votos.votado_id and p.status = 'confirmado'))
+      or (votado_convidado_id is not null and exists (select 1 from public.convidados c where c.id = votos.votado_convidado_id and c.jogo_id = votos.jogo_id))
+    )
   );
 drop policy if exists votos_update on public.votos;
 create policy votos_update on public.votos for update to authenticated
@@ -742,7 +755,10 @@ create policy votos_update on public.votos for update to authenticated
   with check (
     eleitor_id = public.meu_jogador_id()
     and exists (select 1 from public.jogos j where j.id = jogo_id and j.votacao_aberta)
-    and exists (select 1 from public.presencas p where p.jogo_id = votos.jogo_id and p.jogador_id = votos.votado_id and p.status = 'confirmado')
+    and (
+      (votado_id is not null and exists (select 1 from public.presencas p where p.jogo_id = votos.jogo_id and p.jogador_id = votos.votado_id and p.status = 'confirmado'))
+      or (votado_convidado_id is not null and exists (select 1 from public.convidados c where c.id = votos.votado_convidado_id and c.jogo_id = votos.jogo_id))
+    )
   );
 drop policy if exists votos_delete on public.votos;
 create policy votos_delete on public.votos for delete to authenticated
@@ -847,9 +863,11 @@ end;
 $$;
 
 -- Resultado da votação de um jogo. Membros só veem depois que a votação é encerrada.
+drop function if exists public.resultado_votacao(uuid);
 create or replace function public.resultado_votacao(p_jogo_id uuid)
-returns table (jogador_id uuid, nome text, apelido text, votos bigint)
+returns table (jogador_id uuid, nome text, apelido text, votos bigint, convidado boolean)
 language plpgsql stable security definer set search_path = public as $$
+#variable_conflict use_column
 begin
   if not public.is_membro() then
     raise exception 'Acesso negado';
@@ -858,12 +876,16 @@ begin
     return;
   end if;
   return query
-    select j.id, j.nome, j.apelido, count(*)::bigint
+    select x.id, x.nome, x.apelido, count(*)::bigint, x.eh_convidado
       from public.votos v
-      join public.jogadores j on j.id = v.votado_id
+      cross join lateral (
+        select j.id, j.nome, j.apelido, false as eh_convidado from public.jogadores j where j.id = v.votado_id
+        union all
+        select c.id, c.nome, null::text, true from public.convidados c where c.id = v.votado_convidado_id
+      ) x
      where v.jogo_id = p_jogo_id
-     group by j.id, j.nome, j.apelido
-     order by count(*) desc, j.nome;
+     group by x.id, x.nome, x.apelido, x.eh_convidado
+     order by count(*) desc, x.nome;
 end;
 $$;
 
@@ -883,21 +905,23 @@ begin
   if not public.is_membro() then
     raise exception 'Acesso negado';
   end if;
+  -- O craque de cada jogo é quem teve mais votos, jogador OU convidado. Convidado que vence não pontua no ranking
+  -- (não é do elenco), e também não passa o prêmio para outro jogador. Empates: todos os empatados em 1º pontuam.
   return query
     with contagem as (
-      select v.jogo_id, v.votado_id, count(*) as n
+      select v.jogo_id, coalesce(v.votado_id::text, 'c_' || v.votado_convidado_id::text) as candidato, count(*) as n
         from public.votos v
         join public.jogos g on g.id = v.jogo_id
        where not g.votacao_aberta and g.status = 'realizado'
-       group by v.jogo_id, v.votado_id
+       group by 1, 2
     ), vencedores as (
-      select c.jogo_id, c.votado_id,
+      select c.jogo_id, c.candidato,
              rank() over (partition by c.jogo_id order by c.n desc) as pos
         from contagem c
     )
     select j.id, j.nome, j.apelido, count(*)::bigint
       from vencedores w
-      join public.jogadores j on j.id = w.votado_id
+      join public.jogadores j on j.id::text = w.candidato
      where w.pos = 1
      group by j.id, j.nome, j.apelido
      order by count(*) desc, j.nome
@@ -1339,6 +1363,7 @@ begin
              when 'vaga_lista_espera'  then pr.vaga_lista_espera
              when 'lembrete_vespera'   then pr.lembrete_vespera
              when 'resultado_craque'   then pr.resultado_craque
+             when 'aviso_time'         then pr.aviso_time
              else true end
       into v_quer
       from public.push_preferencias pr where pr.jogador_id = p_jogador;
@@ -1413,6 +1438,20 @@ begin
     end loop;
   end loop;
 
+  -- 3) avisos avulsos do admin com "enviar push": ao começar a valer (na hora, se publicado já valendo; às 08:00, se agendado)
+  for g in
+    select a.id, a.titulo, a.mensagem from public.avisos_avulsos a
+     where a.enviar_push and a.push_enviado_em is null and a.inicio <= v_hoje and a.fim >= v_hoje
+       and ((a.created_at at time zone 'America/Sao_Paulo')::date >= a.inicio or v_agora::time >= time '08:00')
+  loop
+    for j in select jo.id from public.jogadores jo where jo.ativo loop
+      v_n := v_n + public.push_enfileirar(
+        j.id, 'aviso_time', '📢 ' || g.titulo,
+        coalesce(nullif(left(g.mensagem, 180), ''), 'Toque para ver o aviso no app.'), '/', 'aviso:' || g.id);
+    end loop;
+    update public.avisos_avulsos set push_enviado_em = now() where id = g.id;
+  end loop;
+
   -- limpeza: notificações enviadas há mais de 30 dias
   delete from public.push_fila where enviado_em is not null and enviado_em < now() - interval '30 days';
   return v_n;
@@ -1435,11 +1474,17 @@ begin
     return null;
   end if;
 
-  select string_agg(coalesce(nullif(j.apelido, ''), j.nome), ' e ' order by j.nome), max(c.n), count(*)
+  select string_agg(case when c.k like 'c\_%' then cv.nome || ' (convidado)' else coalesce(nullif(j.apelido, ''), j.nome) end,
+                    ' e ' order by coalesce(j.nome, cv.nome)),
+         max(c.n), count(*)
     into v_nomes, v_votos, v_n
-    from (select v.votado_id, count(*) as n from public.votos v where v.jogo_id = new.id group by v.votado_id) c
-    join (select max(z.n) as mx from (select count(*) as n from public.votos v where v.jogo_id = new.id group by v.votado_id) z) m on c.n = m.mx
-    join public.jogadores j on j.id = c.votado_id;
+    from (select coalesce(v.votado_id::text, 'c_' || v.votado_convidado_id::text) as k, count(*) as n
+            from public.votos v where v.jogo_id = new.id group by 1) c
+    join (select max(z.n) as mx
+            from (select count(*) as n from public.votos v where v.jogo_id = new.id
+                   group by coalesce(v.votado_id::text, 'c_' || v.votado_convidado_id::text)) z) m on c.n = m.mx
+    left join public.jogadores j on j.id::text = c.k
+    left join public.convidados cv on 'c_' || cv.id::text = c.k;
   if v_nomes is null then
     return null;   -- ninguém votou: não há resultado para avisar
   end if;
@@ -1566,6 +1611,22 @@ begin
 end;
 $$;
 
+-- Admin: quantos jogadores receberiam o push de um aviso (têm notificações ativadas e não desligaram "avisos do time").
+create or replace function public.push_destinatarios_aviso()
+returns int language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.is_admin() then
+    raise exception 'Apenas administradores';
+  end if;
+  return (
+    select count(*)::int from public.jogadores jo
+     where jo.ativo
+       and exists (select 1 from public.push_assinaturas a where a.jogador_id = jo.id)
+       and coalesce((select pr.aviso_time from public.push_preferencias pr where pr.jogador_id = jo.id), true)
+  );
+end;
+$$;
+
 -- Permissões de execução das funções
 revoke execute on function public.gerar_jogos(uuid, int) from public, anon;
 revoke execute on function public.resultado_votacao(uuid) from public, anon;
@@ -1575,6 +1636,7 @@ revoke execute on function public.ranking_vencedores(int) from public, anon;
 revoke execute on function public.jogos_no_ano(int) from public, anon;
 revoke execute on function public.marcar_pagamento(uuid, text, date, uuid, numeric, boolean, uuid) from public, anon;
 revoke execute on function public.processar_jogos() from public, anon;
+revoke execute on function public.push_destinatarios_aviso() from public, anon;
 revoke execute on function public.excluir_pelada(uuid, boolean) from public, anon;
 revoke execute on function public.sincronizar_jogos_da_pelada(uuid, int) from public, anon;
 revoke execute on function public.jogo_limite_mudou() from public, anon, authenticated;
@@ -1606,6 +1668,7 @@ grant execute on function public.ranking_vencedores(int) to authenticated;
 grant execute on function public.jogos_no_ano(int) to authenticated;
 grant execute on function public.marcar_pagamento(uuid, text, date, uuid, numeric, boolean, uuid) to authenticated;
 grant execute on function public.processar_jogos() to authenticated;
+grant execute on function public.push_destinatarios_aviso() to authenticated;
 grant execute on function public.excluir_pelada(uuid, boolean) to authenticated;
 grant execute on function public.sincronizar_jogos_da_pelada(uuid, int) to authenticated;
 grant execute on function public.push_registrar(text, text, text, text) to authenticated;

@@ -107,7 +107,10 @@ export interface Presenca {
 export interface Voto {
   jogo_id: string
   eleitor_id: string
-  votado_id: string
+  /** Jogador votado (ou null, se o voto foi em um convidado). */
+  votado_id: string | null
+  /** Convidado votado (ou null, se o voto foi em um jogador). */
+  votado_convidado_id: string | null
 }
 
 export type TipoPagamento = 'mensalidade' | 'avulso' | 'convidado'
@@ -129,6 +132,8 @@ export interface ResultadoVotacao {
   nome: string
   apelido: string | null
   votos: number
+  /** true quando quem recebeu os votos é um convidado (jogador_id é o id do convidado). */
+  convidado: boolean
 }
 
 export interface RankingCraque {
@@ -204,6 +209,8 @@ export interface AvisoAvulso {
   mensagem: string | null
   inicio: string
   fim: string
+  enviar_push: boolean
+  push_enviado_em: string | null
 }
 
 export type TipoPix = 'cpf' | 'cnpj' | 'email' | 'telefone' | 'aleatoria'
@@ -222,4 +229,5 @@ export interface PushPreferencias {
   vaga_lista_espera: boolean
   lembrete_vespera: boolean
   resultado_craque: boolean
+  aviso_time: boolean
 }

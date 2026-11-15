@@ -281,7 +281,8 @@ export const useMeuVoto = (jogoId: string | undefined, eleitorId: string | undef
 
 export const useVotar = () =>
   useAcao(
-    async (v: Voto) => ok(await supabase.from('votos').upsert(v)),
+    async (v: Pick<Voto, 'jogo_id' | 'eleitor_id' | 'votado_id' | 'votado_convidado_id'>) =>
+      ok(await supabase.from('votos').upsert(v, { onConflict: 'jogo_id,eleitor_id' })),
     [['voto'], ['totalVotos']],
   )
 
@@ -539,10 +540,17 @@ export const useAvisosAvulsos = () =>
 
 export const useSalvarAviso = () =>
   useAcao(
-    async (a: Pick<AvisoAvulso, 'titulo' | 'mensagem' | 'inicio' | 'fim'> & { created_by?: string }) =>
+    async (a: Pick<AvisoAvulso, 'titulo' | 'mensagem' | 'inicio' | 'fim' | 'enviar_push'> & { created_by?: string }) =>
       ok(await supabase.from('avisos_avulsos').insert(a)),
     [['avisosAvulsos']],
   )
+
+/** Admin: quantos jogadores receberiam um aviso por push (têm o app instalado com notificação ligada). */
+export const useDestinatariosAviso = () =>
+  useQuery({
+    queryKey: ['destinatariosAviso'],
+    queryFn: async () => Number(ok(await supabase.rpc('push_destinatarios_aviso'))),
+  })
 
 export const useExcluirAviso = () =>
   useAcao(async (id: string) => ok(await supabase.from('avisos_avulsos').delete().eq('id', id)), [['avisosAvulsos']])
@@ -561,7 +569,7 @@ export const useSalvarConfigTime = () =>
   )
 
 // ---------- Notificações push: preferências ----------
-export const PUSH_PADRAO = { confirmacao_aberta: true, vaga_lista_espera: true, lembrete_vespera: true, resultado_craque: true }
+export const PUSH_PADRAO = { confirmacao_aberta: true, vaga_lista_espera: true, lembrete_vespera: true, resultado_craque: true, aviso_time: true }
 
 export const usePushPreferencias = (jogadorId: string | undefined) =>
   useQuery({

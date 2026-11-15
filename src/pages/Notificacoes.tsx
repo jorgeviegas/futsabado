@@ -8,6 +8,7 @@ const AVISOS: { chave: keyof typeof PUSH_PADRAO; icone: string; titulo: string; 
   { chave: 'confirmacao_aberta', icone: '⚽', titulo: 'Confirmação de presença aberta', detalhe: 'Quando abrir a confirmação do próximo jogo (se você ainda não respondeu).' },
   { chave: 'vaga_lista_espera', icone: '✅', titulo: 'Entrei no jogo', detalhe: 'Quando uma vaga abrir e você sair da lista de espera.' },
   { chave: 'lembrete_vespera', icone: '⏰', titulo: 'Lembrete de véspera', detalhe: '12 horas antes do jogo, se você estiver confirmado.' },
+  { chave: 'aviso_time', icone: '📢', titulo: 'Avisos do time', detalhe: 'Quando o admin publicar um aviso e marcar para notificar os jogadores.' },
   { chave: 'resultado_craque', icone: '🏆', titulo: 'Craque do jogo', detalhe: 'Quando a votação encerrar e o resultado estiver pronto.' },
 ]
 

@@ -90,6 +90,8 @@ Abra a URL no celular → Chrome: **Instalar app / Adicionar à tela inicial** �
   votação abre sozinha; registrar o placar também marca o jogo como realizado e abre a votação. Antes disso, o admin
   pode remover quem **não compareceu** ("Quem não compareceu?" na tela do jogo): some do sorteio, da cobrança, da
   votação e do ranking de assiduidade. O admin encerra a votação para revelar o craque.
+  **Convidados também podem ser votados** (aparecem com a etiqueta *convidado*). Se um convidado vencer sozinho, o resultado
+  mostra o nome dele, mas ninguém soma no ranking de craques; em caso de empate, só os jogadores empatados pontuam.
 - **Encerrar a partida (admin):** o botão "Encerrar jogo" abre uma tela que pede o **placar** e a lista de jogadores para
   marcar os **faltantes**; tudo é gravado de uma vez e a votação do craque abre sozinha. Depois do jogo, a tela mostra só
   as informações, o placar com as **escalações lado a lado** (✓ ao lado de quem já pagou) e a votação.
@@ -130,6 +132,8 @@ Abra a URL no celular → Chrome: **Instalar app / Adicionar à tela inicial** �
 - **Próximo jogo em destaque:** na aba *Jogos*, data (calendário), horário grande e "Hoje/Amanhã/em N dias".
 - **Avisos do time (admin):** na aba *Jogos*, o admin cria avisos avulsos com período de validade; eles aparecem no quadro de
   avisos de todos enquanto estiverem válidos.
+  Com a caixa **🔔 Enviar notificação push aos jogadores**, o aviso também chega no celular de quem tem as notificações
+  ativas (na hora, ou a partir das 08h do dia de início se for agendado). Cada jogador pode desligar em *Notificações → Avisos do time*.
 - **Pix do time:** em *Financeiro → Caixa*, todos veem e copiam a chave Pix com um toque; o admin cadastra/edita.
 
 ## Notificações push (Android e iPhone)

@@ -7,6 +7,7 @@
 // SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY já existem automaticamente nas Edge Functions.
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import webpush from 'npm:web-push@3.6.7'
+import { autorizar } from './auth.ts'
 import { MAX_TENTATIVAS, processarFila, type Assinatura, type ItemFila } from './processar.ts'
 
 const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, {
@@ -17,8 +18,10 @@ webpush.setVapidDetails(Deno.env.get('VAPID_SUBJECT')!, Deno.env.get('VAPID_PUBL
 
 Deno.serve(async (req) => {
   // sem JWT (a função é chamada pelo cron): protegida por um segredo próprio
-  if (req.headers.get('x-cron-secret') !== Deno.env.get('PUSH_CRON_SECRET')) {
-    return new Response('forbidden', { status: 403 })
+  const auth = autorizar(req.headers.get('x-cron-secret'), Deno.env.get('PUSH_CRON_SECRET'))
+  if (!auth.ok) {
+    console.error(`[enviar-push] recusado (${auth.status}): ${auth.motivo}`)   // o motivo fica só no log do projeto
+    return new Response(auth.status === 500 ? 'segredo não configurado' : 'forbidden', { status: auth.status })
   }
 
   try {

@@ -43,7 +43,7 @@ export default function PosJogo({ jogo, jogadores, participantes, funcoes, pagos
         <>
           <div className="lado-a-lado">
             <Coluna cor="branco" lista={s.branco} banco={s.reservas_branco ?? []} por={por} funcoes={funcoes} pagos={pagos} venceu={v === 'branco'} isentos={isentos} />
-            <Coluna cor="preto" lista={s.preto} banco={s.reservas_preto ?? []} por={por} funcoes={funcoes} pagos={pagos} venceu={v === 'preto'} isentos={isentos} />
+            <Coluna direita cor="preto" lista={s.preto} banco={s.reservas_preto ?? []} por={por} funcoes={funcoes} pagos={pagos} venceu={v === 'preto'} isentos={isentos} />
           </div>
           {(s.reservas?.length ?? 0) > 0 && (
             <Coluna cor={null} lista={[]} banco={s.reservas!} por={por} funcoes={funcoes} pagos={pagos} venceu={false} isentos={isentos} />
@@ -62,7 +62,9 @@ export default function PosJogo({ jogo, jogadores, participantes, funcoes, pagos
   )
 }
 
-function Coluna({ cor, lista, banco, por, funcoes, pagos, venceu, isentos }: {
+function Coluna({ cor, lista, banco, por, funcoes, pagos, venceu, isentos, direita = false }: {
+  /** Coluna da direita: espelhada (ícones na borda direita, texto à direita). */
+  direita?: boolean
   cor: 'branco' | 'preto' | null
   lista: Escalado[]
   banco: string[]
@@ -73,7 +75,7 @@ function Coluna({ cor, lista, banco, por, funcoes, pagos, venceu, isentos }: {
   isentos: boolean
 }) {
   return (
-    <div className="time-col">
+    <div className={`time-col ${direita ? 'direita' : ''}`}>
       <div className="time-cab">
         {cor && <span className={`bolinha ${cor}`} />}
         <h3>{cor ? NOME_TIME[cor] : 'Reservas'}{venceu && ' 🏆'}</h3>
@@ -81,14 +83,14 @@ function Coluna({ cor, lista, banco, por, funcoes, pagos, venceu, isentos }: {
       {lista.map((e) => {
         const j = por.get(e.id)
         const gol = e.slot === 'GOL'
-        return <Linha key={e.id} j={j} cor={cor ?? undefined} goleiro={gol} pago={pagos?.has(e.id)} isento={isentos && gol} />
+        return <Linha key={e.id} j={j} cor={cor ?? undefined} goleiro={gol} pago={pagos?.has(e.id)} isento={isentos && gol} espelhado={direita} />
       })}
       {banco.length > 0 && (
         <>
           <span className="muted">Banco</span>
           {banco.map((id) => {
             const j = por.get(id)
-            return <Linha key={id} j={j} cor={cor ?? undefined} goleiro={j?.posicao === 'goleiro' && funcoes[id] !== 'linha'} pago={pagos?.has(id)} isento={false} />
+            return <Linha key={id} j={j} cor={cor ?? undefined} goleiro={j?.posicao === 'goleiro' && funcoes[id] !== 'linha'} pago={pagos?.has(id)} isento={false} espelhado={direita} />
           })}
         </>
       )}
@@ -96,15 +98,23 @@ function Coluna({ cor, lista, banco, por, funcoes, pagos, venceu, isentos }: {
   )
 }
 
-function Linha({ j, cor, goleiro, pago, isento }: { j: Jogador | undefined; cor: 'branco' | 'preto' | undefined; goleiro: boolean; pago?: boolean; isento: boolean }) {
+function Linha({ j, cor, goleiro, pago, isento, espelhado = false }: {
+  j: Jogador | undefined; cor: 'branco' | 'preto' | undefined; goleiro: boolean; pago?: boolean; isento: boolean
+  /** Linha da coluna da direita: a ordem dos itens é invertida para ficar simétrica à da esquerda. */
+  espelhado?: boolean
+}) {
   const nome = j ? exibir(j) : '—'
+  const luva = goleiro && <span role="img" aria-label="Goleiro" title="Goleiro">{espelhado ? '🧤 ' : ' 🧤'}</span>
+  const selo = pago ? (
+    <span className="pago" role="img" aria-label="Pago" title="Pago">✓</span>
+  ) : isento ? (
+    <span className="isento" title="Goleiro isento">isento</span>
+  ) : null
   return (
     <div className="linha-c">
       <Avatar nome={nome} numero={j?.numero_camisa} time={cor} goleiro={goleiro} pequeno />
       <span className="nome">
-        {nome}
-        {goleiro && <span role="img" aria-label="Goleiro" title="Goleiro"> 🧤</span>}
-        {pago ? <span className="pago" role="img" aria-label="Pago" title="Pago">✓</span> : isento ? <span className="isento" title="Goleiro isento">isento</span> : null}
+        {espelhado ? <>{selo}{luva}{nome}</> : <>{nome}{luva}{selo}</>}
       </span>
     </div>
   )

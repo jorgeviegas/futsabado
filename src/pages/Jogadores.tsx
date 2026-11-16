@@ -36,12 +36,12 @@ export default function Jogadores() {
         </div>
       )}
 
-      {ativos.map((j) => <Linha key={j.id} j={j} euId={eu?.id} admin={isAdmin} score={scores?.[j.id]} onEditar={() => setEditando(j)} />)}
+      {ativos.map((j) => <Linha key={j.id} j={j} euId={eu?.id} admin={isAdmin} score={scores ? (scores[j.id] ?? 500) : undefined} onEditar={() => setEditando(j)} />)}
 
       {isAdmin && inativos.length > 0 && (
         <>
           <h2>Inativos</h2>
-          {inativos.map((j) => <Linha key={j.id} j={j} euId={eu?.id} admin score={scores?.[j.id]} onEditar={() => setEditando(j)} />)}
+          {inativos.map((j) => <Linha key={j.id} j={j} euId={eu?.id} admin score={scores ? (scores[j.id] ?? 500) : undefined} onEditar={() => setEditando(j)} />)}
         </>
       )}
 

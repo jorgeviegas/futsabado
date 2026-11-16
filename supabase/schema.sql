@@ -1857,6 +1857,20 @@ create trigger jogos_scores
         or old.sorteio is distinct from new.sorteio)
   execute function public.jogos_atualiza_scores();
 
+-- Todo jogador novo já nasce com score 500 (sem esperar o próximo encerramento de partida)
+create or replace function public.jogador_novo_score()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  insert into public.jogador_scores (jogador_id) values (new.id) on conflict (jogador_id) do nothing;
+  return null;
+end;
+$$;
+drop trigger if exists jogadores_novo_score on public.jogadores;
+create trigger jogadores_novo_score
+  after insert on public.jogadores
+  for each row execute function public.jogador_novo_score();
+revoke execute on function public.jogador_novo_score() from public, anon, authenticated;
+
 alter table public.jogador_scores enable row level security;
 drop policy if exists jogador_scores_select on public.jogador_scores;
 create policy jogador_scores_select on public.jogador_scores for select to authenticated using (public.is_admin());

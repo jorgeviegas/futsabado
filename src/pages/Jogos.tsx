@@ -157,7 +157,8 @@ function DataEmDestaque({ jogo }: { jogo: Jogo }) {
         </div>
         {jogo.local && <span className="muted">📍 {jogo.local}</span>}
       </div>
-      <ClimaJogo jogo={jogo} />
+      {/* o clima ocupa a linha de baixo, nunca fica por cima do horário e do local */}
+      <div className="data-clima"><ClimaJogo jogo={jogo} /></div>
     </div>
   )
 }

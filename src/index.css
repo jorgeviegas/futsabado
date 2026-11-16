@@ -234,6 +234,8 @@ select { background-image: linear-gradient(45deg, transparent 50%, var(--texto-2
 }
 .data-tile span { font-size: .68rem; font-weight: 700; letter-spacing: .08em; opacity: .9; }
 .data-tile strong { font-size: 1.9rem; font-weight: 800; }
+.data-clima { flex: 0 0 100%; min-width: 0; }
+.data-clima .clima { max-width: 100%; flex-wrap: wrap; }
 .data-info { display: grid; gap: .15rem; min-width: 0; flex: 1; }
 .data-info .hora { font-size: 2rem; font-weight: 800; letter-spacing: -.02em; line-height: 1; }
 

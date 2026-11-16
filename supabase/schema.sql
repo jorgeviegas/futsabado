@@ -1608,7 +1608,8 @@ create trigger jogos_push_craque
 create or replace function public.push_registrar(p_endpoint text, p_p256dh text, p_auth text, p_user_agent text default null)
 returns void language plpgsql security definer set search_path = public as $$
 declare
-  v_jogador uuid := public.meu_jogador_id();
+  -- vale também para quem ainda aguarda aprovação (ativo = false): assim ele recebe o aviso de "cadastro aprovado"
+  v_jogador uuid := (select id from public.jogadores where user_id = auth.uid());
 begin
   if v_jogador is null then
     raise exception 'Acesso negado';
@@ -1619,6 +1620,26 @@ begin
     set jogador_id = excluded.jogador_id, p256dh = excluded.p256dh, auth = excluded.auth, user_agent = excluded.user_agent;
 end;
 $$;
+
+-- Cadastro aprovado por um admin (ativo false -> true): avisa quem tem notificações ligadas.
+create or replace function public.push_cadastro_aprovado()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if new.user_id is not null then
+    perform public.push_enfileirar(
+      new.id, 'cadastro_aprovado', '✅ Cadastro aprovado!',
+      'Bem-vindo ao FutSábado! Toque para abrir o app e confirmar presença nos jogos.', '/',
+      'aprovado:' || extract(epoch from clock_timestamp())::bigint
+    );
+  end if;
+  return null;
+end;
+$$;
+drop trigger if exists jogadores_aprovado_push on public.jogadores;
+create trigger jogadores_aprovado_push
+  after update of ativo on public.jogadores
+  for each row when (old.ativo is distinct from true and new.ativo is true)
+  execute function public.push_cadastro_aprovado();
 
 -- App: envia uma notificação de teste para o próprio jogador (chega em até 1 minuto).
 create or replace function public.push_teste()
@@ -1895,6 +1916,7 @@ revoke execute on function public.jogo_copiar_da_pelada() from public, anon, aut
 revoke execute on function public.push_enfileirar(uuid, text, text, text, text, text) from public, anon, authenticated;
 revoke execute on function public.push_gerar_agendados(timestamp) from public, anon, authenticated;
 revoke execute on function public.push_craque() from public, anon, authenticated;
+revoke execute on function public.push_cadastro_aprovado() from public, anon, authenticated;
 revoke execute on function public.push_registrar(text, text, text, text) from public, anon;
 revoke execute on function public.push_teste() from public, anon;
 revoke execute on function public.gerar_jogos_automaticos() from public, anon;

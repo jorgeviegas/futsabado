@@ -150,7 +150,7 @@ Abra a URL no celular → Chrome: **Instalar app / Adicionar à tela inicial** �
 
 ## Notificações push (Android e iPhone)
 
-Avisos automáticos no celular, sem depender do WhatsApp: **confirmação de presença aberta**, **você entrou no jogo** (saiu da
+Avisos automáticos no celular, sem depender do WhatsApp (inclui **cadastro aprovado**: quem criou a conta e ligou as notificações na tela "aguardando aprovação" é avisado quando um admin libera): **confirmação de presença aberta**, **você entrou no jogo** (saiu da
 lista de espera), **lembrete de véspera** (12 h antes do jogo, para confirmados) e **craque do jogo** (só quando a votação
 encerra e o resultado está pronto). Cada jogador escolhe o que quer receber em 🔔 (cabeçalho do app).
 

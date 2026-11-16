@@ -21,7 +21,7 @@ export default defineConfig({
         short_name: 'FutSábado',
         description: 'Gerencie as peladas do FutSábado: presença, craque do jogo e financeiro.',
         lang: 'pt-BR',
-        theme_color: '#7a1328',
+        theme_color: '#3b0918',
         background_color: '#0d0d0d',
         display: 'standalone',
         orientation: 'portrait',

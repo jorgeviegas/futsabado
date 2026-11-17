@@ -29,7 +29,7 @@ export default function Competitivo() {
   return (
     <>
       <div className="linha entre">
-        <h1>🏅 Competitivo</h1>
+        <h1>⚔️ Competitivo</h1>
         {isAdmin && <button className="btn peq" onClick={() => setEditando({})}>➕ Novo jogo</button>}
       </div>
 

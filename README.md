@@ -107,7 +107,7 @@ Abra a URL no celular → Chrome: **Instalar app / Adicionar à tela inicial** �
   saídas avulsas). Pagamentos confirmados entram no caixa automaticamente.
 - **Clima:** o admin define a cidade da pelada (busca pela Open-Meteo, gratuita e sem chave) e cada próximo jogo mostra
   a temperatura e a condição do tempo previstas para a hora marcada, até 15 dias à frente.
-- **Competitivo:** jogos do time contra outros times. O admin libera a aba para cada atleta com a caixa **🏅 Acesso à aba
+- **Competitivo:** jogos do time contra outros times. O admin libera a aba para cada atleta com a caixa **⚔️ Acesso à aba
   Competitivo** no *Elenco* (admins sempre veem). Na aba, o admin marca os jogos avulsos (adversário, competição, data, local e
   placar) e todos com acesso veem a tabela do ano, com a campanha (V/E/D e gols). São jogos com a flag `competitivo` em `jogos`:
   não entram nos rankings, no Player Score, nas cobranças, nos avisos nem nos push da pelada. Gols e assistências ficam em

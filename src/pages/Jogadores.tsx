@@ -74,7 +74,7 @@ function Linha({ j, euId, admin, score, onEditar }: { j: Jogador; euId?: string;
       {admin && j.ativo && (
         <label className="check-comp" onClick={(e) => e.stopPropagation()}>
           <input type="checkbox" checked={j.competitivo} disabled={definir.isPending} onChange={(e) => definir.mutate({ id: j.id, competitivo: e.target.checked })} />
-          <span>🏅 Acesso à aba Competitivo</span>
+          <span>⚔️ Acesso à aba Competitivo</span>
         </label>
       )}
     </div>

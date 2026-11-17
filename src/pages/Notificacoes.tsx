@@ -9,6 +9,7 @@ const AVISOS: { chave: keyof typeof PUSH_PADRAO; icone: string; titulo: string; 
   { chave: 'vaga_lista_espera', icone: '✅', titulo: 'Entrei no jogo', detalhe: 'Quando uma vaga abrir e você sair da lista de espera.' },
   { chave: 'lembrete_vespera', icone: '⏰', titulo: 'Lembrete de véspera', detalhe: '12 horas antes do jogo, se você estiver confirmado.' },
   { chave: 'aviso_time', icone: '📢', titulo: 'Avisos do time', detalhe: 'Quando o admin publicar um aviso e marcar para notificar os jogadores.' },
+  { chave: 'jogo_competitivo', icone: '⚔️', titulo: 'Novo jogo competitivo', detalhe: 'Quando um admin marcar um jogo do time contra outro time (só para quem está no grupo competitivo).' },
   { chave: 'resultado_craque', icone: '🏆', titulo: 'Craque do jogo', detalhe: 'Quando a votação encerrar e o resultado estiver pronto.' },
 ]
 
@@ -108,7 +109,7 @@ export default function Notificacoes() {
       <div className="card">
         <h2>O que você quer receber</h2>
         <p className="muted">Vale para todos os seus aparelhos.</p>
-        {AVISOS.map((a) => {
+        {AVISOS.filter((a) => a.chave !== 'jogo_competitivo' || eu?.competitivo).map((a) => {
           const ligado = local[a.chave] ?? prefs?.[a.chave] ?? true
           return (
             <label className="pref-linha" key={a.chave}>

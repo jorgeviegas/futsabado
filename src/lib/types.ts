@@ -250,4 +250,5 @@ export interface PushPreferencias {
   lembrete_vespera: boolean
   resultado_craque: boolean
   aviso_time: boolean
+  jogo_competitivo: boolean
 }

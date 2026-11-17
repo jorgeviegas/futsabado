@@ -344,6 +344,9 @@ alter table public.jogos add constraint jogos_gols_competitivo_check
   check ((gols_pro is null or gols_pro between 0 and 99) and (gols_contra is null or gols_contra between 0 and 99));
 create index if not exists jogos_competitivo_idx on public.jogos (data) where competitivo;
 
+-- v18: jogos competitivos com presença, encerramento (gols/assistências) e push de novo jogo
+alter table public.push_preferencias add column if not exists jogo_competitivo boolean not null default true;
+
 -- Caixa do time: entradas e saídas avulsas (as mensalidades/jogos pagos entram automaticamente no extrato).
 create table if not exists public.caixa_lancamentos (
   id          uuid primary key default gen_random_uuid(),
@@ -767,7 +770,7 @@ create policy jogos_admin on public.jogos for all to authenticated
 -- presencas: todos os membros veem; cada um marca a própria (em jogos agendados); admin marca qualquer uma
 drop policy if exists presencas_select on public.presencas;
 create policy presencas_select on public.presencas for select to authenticated
-  using (public.is_membro());
+  using (public.is_membro() and exists (select 1 from public.jogos j where j.id = presencas.jogo_id));   -- RLS de jogos esconde os competitivos de quem não tem acesso
 drop policy if exists presencas_insert on public.presencas;
 create policy presencas_insert on public.presencas for insert to authenticated
   with check (
@@ -1248,15 +1251,13 @@ returns void language plpgsql security definer set search_path = public as $$
 declare
   v uuid;
   e jsonb;
+  v_comp boolean;
 begin
   if not public.is_admin() then
     raise exception 'Apenas administradores podem encerrar o jogo';
   end if;
   if (p_placar_branco is null) <> (p_placar_preto is null) then
     raise exception 'Informe o placar dos dois times';
-  end if;
-  if exists (select 1 from public.jogos where id = p_jogo_id and competitivo) then
-    raise exception 'Jogos competitivos são encerrados na aba Competitivo';
   end if;
   if not exists (select 1 from public.jogos where id = p_jogo_id and status <> 'cancelado') then
     raise exception 'Jogo não encontrado ou cancelado';
@@ -1284,13 +1285,23 @@ begin
   update public.presencas set gols = 0, assistencias = 0
    where jogo_id = p_jogo_id and status <> 'confirmado' and (gols <> 0 or assistencias <> 0);
 
-  update public.jogos
-     set placar_branco = coalesce(p_placar_branco, placar_branco),
-         placar_preto  = coalesce(p_placar_preto, placar_preto),
-         status = case when status = 'agendado' then 'realizado' else status end
-   where id = p_jogo_id;
+  select competitivo into v_comp from public.jogos where id = p_jogo_id;
+  if v_comp then
+    -- jogo competitivo: o "placar" é nosso time x adversário; sem votação e sem Player Score
+    update public.jogos
+       set gols_pro    = coalesce(p_placar_branco, gols_pro),
+           gols_contra = coalesce(p_placar_preto, gols_contra),
+           status = case when status = 'agendado' then 'realizado' else status end
+     where id = p_jogo_id;
+  else
+    update public.jogos
+       set placar_branco = coalesce(p_placar_branco, placar_branco),
+           placar_preto  = coalesce(p_placar_preto, placar_preto),
+           status = case when status = 'agendado' then 'realizado' else status end
+     where id = p_jogo_id;
 
-  perform public.recalcular_scores();   -- o Player Score é atualizado a cada encerramento
+    perform public.recalcular_scores();   -- o Player Score é atualizado a cada encerramento
+  end if;
 end;
 $$;
 
@@ -1487,6 +1498,7 @@ begin
              when 'lembrete_vespera'   then pr.lembrete_vespera
              when 'resultado_craque'   then pr.resultado_craque
              when 'aviso_time'         then pr.aviso_time
+             when 'jogo_competitivo'   then pr.jogo_competitivo
              else true end
       into v_quer
       from public.push_preferencias pr where pr.jogador_id = p_jogador;
@@ -1666,6 +1678,37 @@ create trigger jogadores_aprovado_push
   after update of ativo on public.jogadores
   for each row when (old.ativo is distinct from true and new.ativo is true)
   execute function public.push_cadastro_aprovado();
+
+-- Jogo competitivo criado: avisa os jogadores com acesso à aba Competitivo (menos quem criou), pedindo a confirmação.
+create or replace function public.push_jogo_competitivo()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  j record;
+  v_dias text[] := array['dom','seg','ter','qua','qui','sex','sáb'];
+begin
+  if new.status <> 'agendado' or new.data < (now() at time zone 'America/Sao_Paulo')::date then
+    return null;   -- jogo já passado ou lançado só para registrar o placar: sem aviso
+  end if;
+  for j in
+    select id from public.jogadores
+     where ativo and competitivo and id is distinct from public.meu_jogador_id()
+  loop
+    perform public.push_enfileirar(
+      j.id, 'jogo_competitivo', '⚔️ Novo jogo competitivo',
+      'vs ' || coalesce(new.adversario, 'adversário') || ' · ' || v_dias[extract(dow from new.data)::int + 1] || ' ' ||
+        to_char(new.data, 'DD/MM') || ' às ' || to_char(new.horario, 'HH24:MI') ||
+        coalesce(' · ' || nullif(new.local, ''), '') || '. Confirme sua presença!',
+      '/competitivo', 'comp:' || new.id
+    );
+  end loop;
+  return null;
+end;
+$$;
+drop trigger if exists jogos_novo_competitivo_push on public.jogos;
+create trigger jogos_novo_competitivo_push
+  after insert on public.jogos
+  for each row when (new.competitivo)
+  execute function public.push_jogo_competitivo();
 
 -- App: envia uma notificação de teste para o próprio jogador (chega em até 1 minuto).
 create or replace function public.push_teste()
@@ -1942,6 +1985,7 @@ revoke execute on function public.jogo_copiar_da_pelada() from public, anon, aut
 revoke execute on function public.push_enfileirar(uuid, text, text, text, text, text) from public, anon, authenticated;
 revoke execute on function public.push_gerar_agendados(timestamp) from public, anon, authenticated;
 revoke execute on function public.push_craque() from public, anon, authenticated;
+revoke execute on function public.push_jogo_competitivo() from public, anon, authenticated;
 revoke execute on function public.tem_acesso_competitivo() from public, anon;
 grant execute on function public.tem_acesso_competitivo() to authenticated;
 revoke execute on function public.push_cadastro_aprovado() from public, anon, authenticated;

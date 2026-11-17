@@ -528,7 +528,7 @@ export const useEncerrarJogo = () =>
           p_estatisticas: v.estatisticas ?? null,
         }),
       ),
-    [['jogos'], ['jogo'], ['presencas'], ['convidados'], ['voto'], ['totalVotos'], ['resultado'], ['cobrancas'], ['ranking'], ['jogosNoAno'], ['pagosJogo'], ['caixa'], ['scores']],
+    [['jogos'], ['jogo'], ['presencas'], ['convidados'], ['voto'], ['totalVotos'], ['resultado'], ['cobrancas'], ['ranking'], ['jogosNoAno'], ['pagosJogo'], ['caixa'], ['scores'], ['competitivo']],
   )
 
 /** Quem já pagou neste jogo: "id do jogador" ou "c_<id do convidado>" (todos os membros veem o ✓). */
@@ -600,7 +600,7 @@ export const useSalvarConfigTime = () =>
   )
 
 // ---------- Notificações push: preferências ----------
-export const PUSH_PADRAO = { confirmacao_aberta: true, vaga_lista_espera: true, lembrete_vespera: true, resultado_craque: true, aviso_time: true }
+export const PUSH_PADRAO = { confirmacao_aberta: true, vaga_lista_espera: true, lembrete_vespera: true, resultado_craque: true, aviso_time: true, jogo_competitivo: true }
 
 export const usePushPreferencias = (jogadorId: string | undefined) =>
   useQuery({
@@ -638,8 +638,6 @@ export type JogoCompetitivoForm = {
   horario: string
   local: string | null
   status: 'agendado' | 'realizado' | 'cancelado'
-  gols_pro: number | null
-  gols_contra: number | null
 }
 
 export const useSalvarJogoCompetitivo = () =>
@@ -655,3 +653,11 @@ export const useSalvarJogoCompetitivo = () =>
 
 export const useExcluirJogoCompetitivo = () =>
   useAcao(async (id: string) => ok(await supabase.from('jogos').delete().eq('id', id).eq('competitivo', true)), [['competitivo']])
+
+/** Presenças (e gols/assistências) dos jogos competitivos informados. */
+export const usePresencasCompetitivo = (jogoIds: string[]) =>
+  useQuery({
+    queryKey: ['presencas', 'competitivo', jogoIds.join(',')],
+    enabled: jogoIds.length > 0,
+    queryFn: async () => ok(await supabase.from('presencas').select('*').in('jogo_id', jogoIds)) as Presenca[],
+  })

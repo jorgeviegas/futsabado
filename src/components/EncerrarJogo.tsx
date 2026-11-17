@@ -16,8 +16,10 @@ export default function EncerrarJogo({ jogo, participantes, funcoes, onFechar }:
   onFechar: () => void
 }) {
   const encerrar = useEncerrarJogo()
-  const [branco, setBranco] = useState(jogo.placar_branco?.toString() ?? '')
-  const [preto, setPreto] = useState(jogo.placar_preto?.toString() ?? '')
+  const comp = jogo.competitivo
+  // jogo competitivo: o placar é "nosso time x adversário"
+  const [branco, setBranco] = useState((comp ? jogo.gols_pro : jogo.placar_branco)?.toString() ?? '')
+  const [preto, setPreto] = useState((comp ? jogo.gols_contra : jogo.placar_preto)?.toString() ?? '')
   const { data: pres = [] } = usePresencas(jogo.id)
   const [faltou, setFaltou] = useState<Set<string>>(new Set())
   // gols/assistências digitados; quem não foi mexido mostra o valor já gravado (ao reabrir um jogo encerrado)
@@ -63,11 +65,11 @@ export default function EncerrarJogo({ jogo, participantes, funcoes, onFechar }:
         <div>
           <strong>Placar</strong>
           <div className="placar-form" style={{ marginTop: '.4rem' }}>
-            <label>Branco
+            <label>{comp ? 'Nosso time' : 'Branco'}
               <input type="number" inputMode="numeric" min={0} value={branco} onChange={(e) => setBranco(e.target.value)} autoFocus />
             </label>
             <span className="x">x</span>
-            <label>Preto
+            <label>{comp ? (jogo.adversario ?? 'Adversário') : 'Preto'}
               <input type="number" inputMode="numeric" min={0} value={preto} onChange={(e) => setPreto(e.target.value)} />
             </label>
           </div>
@@ -75,7 +77,7 @@ export default function EncerrarJogo({ jogo, participantes, funcoes, onFechar }:
 
         <div className="form">
           <strong>Quem jogou</strong>
-          <span className="muted">Marque “Faltou” para quem não apareceu (sai dos times, da cobrança e da votação) e some gols ⚽ e assistências 🍽️.</span>
+          <span className="muted">{comp ? 'Marque “Faltou” para quem não apareceu' : 'Marque “Faltou” para quem não apareceu (sai dos times, da cobrança e da votação)'} e some gols ⚽ e assistências 🍽️.</span>
           {participantes.length === 0 && <span className="muted">Ninguém confirmado.</span>}
           {participantes.map((j) => {
             const marcado = faltou.has(j.id)
@@ -108,7 +110,7 @@ export default function EncerrarJogo({ jogo, participantes, funcoes, onFechar }:
         </div>
 
         <Erro erro={encerrar.error} />
-        {agendado && <span className="muted">Ao encerrar, o jogo vira “realizado” e a votação do craque abre automaticamente.</span>}
+        {agendado && <span className="muted">{comp ? 'Ao encerrar, o jogo vira “realizado” com o placar e as estatísticas de cada jogador.' : 'Ao encerrar, o jogo vira “realizado” e a votação do craque abre automaticamente.'}</span>}
         <button className="btn" disabled={!placarOk || encerrar.isPending}>
           {encerrar.isPending ? 'Salvando…' : agendado ? '✅ Encerrar partida' : 'Salvar placar e faltosos'}
         </button>

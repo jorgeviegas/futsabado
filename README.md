@@ -112,6 +112,9 @@ Abra a URL no celular → Chrome: **Instalar app / Adicionar à tela inicial** �
   placar) e todos com acesso veem a tabela do ano, com a campanha (V/E/D e gols). São jogos com a flag `competitivo` em `jogos`:
   não entram nos rankings, no Player Score, nas cobranças, nos avisos nem nos push da pelada. Gols e assistências ficam em
   `presencas`, e o tipo do jogo (competitivo ou não) separa as estatísticas; os rankings competitivos virão depois.
+  Quem tem acesso confirma presença (✅ Vou / ❌ Não vou) no detalhe de cada jogo. O admin encerra a partida na mesma tela de
+  gols e assistências da pelada (placar nosso time x adversário, faltosos e contadores por jogador). Ao criar um jogo
+  futuro, os jogadores do grupo recebem um push (**⚔️ Novo jogo competitivo**; dá para desligar em *Notificações*).
 - **Player Score (só admins):** nota de 0 a 1000 por jogador (novos começam em 500), recalculada a cada encerramento de
   partida e quando uma votação fecha. Aparece como ⭐ no *Elenco* para admins; o banco só entrega a tabela
   `jogador_scores` a admins. Combina aproveitamento de vitórias, gols/assistências (comparados aos da mesma posição),

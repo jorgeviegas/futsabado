@@ -10,6 +10,7 @@ import Jogos from './pages/Jogos'
 import JogoDetalhe from './pages/JogoDetalhe'
 import Jogadores from './pages/Jogadores'
 import Peladas from './pages/Peladas'
+import Competitivo from './pages/Competitivo'
 import Financeiro from './pages/Financeiro'
 import Rankings from './pages/Rankings'
 import Onboarding from './pages/Onboarding'
@@ -40,6 +41,7 @@ function Rotas() {
         <Route path="posicoes" element={<Onboarding embutido />} />
         <Route path="notificacoes" element={<Notificacoes />} />
         <Route path="financeiro" element={<Financeiro />} />
+        <Route path="competitivo" element={isAdmin || eu?.competitivo ? <Competitivo /> : <Navigate to="/" replace />} />
         <Route path="peladas" element={isAdmin ? <Peladas /> : <Navigate to="/" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

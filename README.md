@@ -107,6 +107,11 @@ Abra a URL no celular → Chrome: **Instalar app / Adicionar à tela inicial** �
   saídas avulsas). Pagamentos confirmados entram no caixa automaticamente.
 - **Clima:** o admin define a cidade da pelada (busca pela Open-Meteo, gratuita e sem chave) e cada próximo jogo mostra
   a temperatura e a condição do tempo previstas para a hora marcada, até 15 dias à frente.
+- **Competitivo:** jogos do time contra outros times. O admin libera a aba para cada atleta com a caixa **🏅 Acesso à aba
+  Competitivo** no *Elenco* (admins sempre veem). Na aba, o admin marca os jogos avulsos (adversário, competição, data, local e
+  placar) e todos com acesso veem a tabela do ano, com a campanha (V/E/D e gols). São jogos com a flag `competitivo` em `jogos`:
+  não entram nos rankings, no Player Score, nas cobranças, nos avisos nem nos push da pelada. Gols e assistências ficam em
+  `presencas`, e o tipo do jogo (competitivo ou não) separa as estatísticas; os rankings competitivos virão depois.
 - **Player Score (só admins):** nota de 0 a 1000 por jogador (novos começam em 500), recalculada a cada encerramento de
   partida e quando uma votação fecha. Aparece como ⭐ no *Elenco* para admins; o banco só entrega a tabela
   `jogador_scores` a admins. Combina aproveitamento de vitórias, gols/assistências (comparados aos da mesma posição),

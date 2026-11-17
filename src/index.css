@@ -271,3 +271,18 @@ body::before {
   background: url('/listras.webp') center top / min(100%, 720px) 100% no-repeat;
   opacity: .14;
 }
+
+/* Aba Competitivo */
+.campanha { display: grid; grid-template-columns: repeat(5, 1fr); text-align: center; gap: .3rem; padding: .7rem .4rem; }
+.campanha > div { display: grid; gap: 0; }
+.campanha strong { font-size: 1.25rem; }
+.campanha .muted { font-size: .7rem; }
+.tabela-comp { width: 100%; border-collapse: collapse; }
+.tabela-comp th { text-align: left; font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--texto-2); padding: .55rem .7rem; border-bottom: 1px solid var(--borda); }
+.tabela-comp td { padding: .6rem .7rem; border-bottom: 1px solid var(--borda); vertical-align: middle; }
+.tabela-comp tr:last-child td { border-bottom: 0; }
+.tabela-comp td:last-child, .tabela-comp th:last-child { text-align: right; }
+.tabela-comp tr.clicavel { cursor: pointer; } .tabela-comp tr.clicavel:active { background: var(--card-2); }
+.tabela-comp .muted { font-size: .78rem; }
+.check-comp { display: flex; align-items: center; gap: .5rem; font-size: .85rem; color: var(--texto-2); cursor: pointer; padding-top: .2rem; }
+.check-comp input { width: auto; }

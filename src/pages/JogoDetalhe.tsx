@@ -53,7 +53,7 @@ export default function JogoDetalhe() {
   // convidados entram nas listas e no sorteio como participantes avulsos (id "c_<uuid>")
   const convidadosComoJogador: Jogador[] = convidados.map((c) => ({
     id: `c_${c.id}`, user_id: null, nome: c.nome, apelido: null, email: null, telefone: null, posicao: c.posicao,
-    posicao_secundaria: null, numero_camisa: null, perfil_completo: true, tipo: 'avulso', is_admin: false, ativo: true, created_at: '',
+    posicao_secundaria: null, numero_camisa: null, perfil_completo: true, tipo: 'avulso', is_admin: false, ativo: true, competitivo: false, created_at: '',
   }))
   const donoDoConvidado = Object.fromEntries(
     convidados.map((c) => [`c_${c.id}`, exibir(jogadores.find((j) => j.id === c.convidado_por) ?? { nome: '?', apelido: null })]),

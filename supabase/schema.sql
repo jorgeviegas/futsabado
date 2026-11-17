@@ -328,6 +328,22 @@ create table if not exists public.jogador_scores (
 );
 -- (RLS e política de leitura ficam mais abaixo, depois da função is_admin())
 
+-- v17: JOGOS COMPETITIVOS. Jogos do time contra outros times: sempre avulsos (sem pelada), marcados com a flag
+-- `competitivo`. Não entram em rankings, Player Score, cobranças, avisos nem na tela de jogos da pelada; terão rankings próprios.
+-- Gols e assistências continuam em `presencas`; o jogo (competitivo ou não) diz de qual tipo eles são.
+alter table public.jogadores add column if not exists competitivo boolean not null default false;   -- acesso à aba Competitivo
+alter table public.jogos add column if not exists competitivo boolean not null default false;
+alter table public.jogos add column if not exists adversario text;
+alter table public.jogos add column if not exists competicao text;
+alter table public.jogos add column if not exists gols_pro int;
+alter table public.jogos add column if not exists gols_contra int;
+alter table public.jogos drop constraint if exists jogos_competitivo_avulso_check;
+alter table public.jogos add constraint jogos_competitivo_avulso_check check (not competitivo or pelada_id is null);
+alter table public.jogos drop constraint if exists jogos_gols_competitivo_check;
+alter table public.jogos add constraint jogos_gols_competitivo_check
+  check ((gols_pro is null or gols_pro between 0 and 99) and (gols_contra is null or gols_contra between 0 and 99));
+create index if not exists jogos_competitivo_idx on public.jogos (data) where competitivo;
+
 -- Caixa do time: entradas e saídas avulsas (as mensalidades/jogos pagos entram automaticamente no extrato).
 create table if not exists public.caixa_lancamentos (
   id          uuid primary key default gen_random_uuid(),
@@ -352,6 +368,12 @@ $$;
 create or replace function public.is_membro()
 returns boolean language sql stable security definer set search_path = public as $$
   select exists (select 1 from public.jogadores where user_id = auth.uid() and ativo);
+$$;
+
+-- Jogador ativo marcado por um admin com acesso à aba Competitivo.
+create or replace function public.tem_acesso_competitivo()
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.jogadores where user_id = auth.uid() and ativo and competitivo);
 $$;
 
 create or replace function public.is_admin()
@@ -427,6 +449,7 @@ returns trigger language plpgsql security definer set search_path = public as $$
 begin
   if auth.uid() is not null and not public.is_admin() then
     new.is_admin := old.is_admin;
+    new.competitivo := old.competitivo;
     new.ativo    := old.ativo;
     new.tipo     := old.tipo;
     new.user_id  := old.user_id;
@@ -475,7 +498,7 @@ begin
       new.status := 'realizado';
     end if;
   end if;
-  if new.status = 'realizado' and new.votacao_iniciada_em is null then
+  if new.status = 'realizado' and new.votacao_iniciada_em is null and not new.competitivo then
     new.votacao_aberta := true;
     new.votacao_iniciada_em := now();
   end if;
@@ -736,7 +759,7 @@ create policy peladas_admin on public.peladas for all to authenticated
 -- jogos
 drop policy if exists jogos_select on public.jogos;
 create policy jogos_select on public.jogos for select to authenticated
-  using (public.is_membro());
+  using (public.is_membro() and (not competitivo or public.is_admin() or public.tem_acesso_competitivo()));
 drop policy if exists jogos_admin on public.jogos;
 create policy jogos_admin on public.jogos for all to authenticated
   using (public.is_admin()) with check (public.is_admin());
@@ -947,7 +970,7 @@ begin
       select v.jogo_id, coalesce(v.votado_id::text, 'c_' || v.votado_convidado_id::text) as candidato, count(*) as n
         from public.votos v
         join public.jogos g on g.id = v.jogo_id
-       where not g.votacao_aberta and g.status = 'realizado'
+       where not g.votacao_aberta and g.status = 'realizado' and not g.competitivo
        group by 1, 2
     ), vencedores as (
       select c.jogo_id, c.candidato,
@@ -1032,7 +1055,7 @@ begin
         select r #>> '{}' from jsonb_array_elements(coalesce(g.sorteio -> ('reservas_' || g.time_vencedor), '[]'::jsonb)) r
       ) x
       join public.jogadores j on j.id::text = x.pid
-     where g.status = 'realizado'
+     where g.status = 'realizado' and not g.competitivo
        and g.time_vencedor in ('branco', 'preto')
        and g.sorteio is not null
      group by j.id, j.nome, j.apelido
@@ -1054,7 +1077,7 @@ begin
       from public.presencas p
       join public.jogos g on g.id = p.jogo_id
      where p.status = 'confirmado'
-       and g.status = 'realizado'
+       and g.status = 'realizado' and not g.competitivo
        and extract(year from g.data)::int = coalesce(p_ano, extract(year from now())::int)
      group by p.jogador_id;
 end;
@@ -1072,7 +1095,7 @@ begin
   end if;
   update public.jogos g
      set status = 'realizado'
-   where g.status = 'agendado'
+   where g.status = 'agendado' and not g.competitivo
      and g.data < (now() at time zone 'America/Sao_Paulo')::date
      and exists (select 1 from public.presencas p where p.jogo_id = g.id and p.status = 'confirmado');
   get diagnostics v = row_count;
@@ -1197,7 +1220,7 @@ begin
   return query
     with jogos_ano as (
       select g.id from public.jogos g
-       where g.status = 'realizado' and extract(year from g.data)::int = v_ano
+       where g.status = 'realizado' and not g.competitivo and extract(year from g.data)::int = v_ano
     )
     select j.id, j.nome, j.apelido, count(*)::bigint, (select count(*) from jogos_ano)::bigint
       from public.presencas pr
@@ -1231,6 +1254,9 @@ begin
   end if;
   if (p_placar_branco is null) <> (p_placar_preto is null) then
     raise exception 'Informe o placar dos dois times';
+  end if;
+  if exists (select 1 from public.jogos where id = p_jogo_id and competitivo) then
+    raise exception 'Jogos competitivos são encerrados na aba Competitivo';
   end if;
   if not exists (select 1 from public.jogos where id = p_jogo_id and status <> 'cancelado') then
     raise exception 'Jogo não encontrado ou cancelado';
@@ -1281,7 +1307,7 @@ begin
   return query
     select j.id, j.nome, j.apelido, sum(pr.gols)::bigint, count(*)::bigint
       from public.presencas pr
-      join public.jogos g on g.id = pr.jogo_id and g.status = 'realizado' and extract(year from g.data)::int = v_ano
+      join public.jogos g on g.id = pr.jogo_id and g.status = 'realizado' and not g.competitivo and extract(year from g.data)::int = v_ano
       join public.jogadores j on j.id = pr.jogador_id
      where pr.status = 'confirmado'
      group by j.id, j.nome, j.apelido
@@ -1303,7 +1329,7 @@ begin
   return query
     select j.id, j.nome, j.apelido, sum(pr.assistencias)::bigint, count(*)::bigint
       from public.presencas pr
-      join public.jogos g on g.id = pr.jogo_id and g.status = 'realizado' and extract(year from g.data)::int = v_ano
+      join public.jogos g on g.id = pr.jogo_id and g.status = 'realizado' and not g.competitivo and extract(year from g.data)::int = v_ano
       join public.jogadores j on j.id = pr.jogador_id
      where pr.status = 'confirmado'
      group by j.id, j.nome, j.apelido
@@ -1364,7 +1390,7 @@ begin
 
   select count(*) into v_total
     from public.jogos g
-   where g.status = 'realizado' and g.placar_branco is not null and g.placar_preto is not null
+   where g.status = 'realizado' and not g.competitivo and g.placar_branco is not null and g.placar_preto is not null
      and g.sorteio is not null and extract(year from g.data)::int = v_ano;
   if v_total = 0 then
     return;
@@ -1374,7 +1400,7 @@ begin
   return query
     with jv as (
       select g.sorteio, g.placar_branco, g.placar_preto from public.jogos g
-       where g.status = 'realizado' and g.placar_branco is not null and g.placar_preto is not null
+       where g.status = 'realizado' and not g.competitivo and g.placar_branco is not null and g.placar_preto is not null
          and g.sorteio is not null and extract(year from g.data)::int = v_ano
     ), atuacoes as (   -- uma linha por goleiro e jogo, com os gols que o time dele sofreu
       select e ->> 'id' as pid, jv.placar_preto::int as sofridos
@@ -1497,7 +1523,7 @@ begin
     for g in
       select ge.id, ge.data, ge.horario, ge.created_at, coalesce(ge.pelada_nome, 'Pelada') as nome, public.liberacao_confirmacao(ge.id) as lib
         from public.jogos ge
-       where ge.status = 'agendado' and (ge.data + ge.horario) > v_agora
+       where ge.status = 'agendado' and not ge.competitivo and (ge.data + ge.horario) > v_agora
     loop
       -- só avisa quando acabou de abrir (hoje ou ontem); sem jogo anterior, vale desde a criação do jogo
       continue when not (
@@ -1520,7 +1546,7 @@ begin
   for g in
     select ge.id, ge.data, ge.horario, ge.local, coalesce(ge.pelada_nome, 'Pelada') as nome
       from public.jogos ge
-     where ge.status = 'agendado'
+     where ge.status = 'agendado' and not ge.competitivo
        and (ge.data + ge.horario) > v_agora
        and (ge.data + ge.horario) - interval '12 hours' <= v_agora
   loop
@@ -1784,7 +1810,7 @@ begin
            g.placar_branco, g.placar_preto, g.time_vencedor
       from public.presencas pr
       join public.jogos g on g.id = pr.jogo_id
-     where pr.status = 'confirmado' and g.status = 'realizado'
+     where pr.status = 'confirmado' and g.status = 'realizado' and not g.competitivo
   ),
   lv as (
     select l.*,
@@ -1809,7 +1835,7 @@ begin
            case j.posicao when 'goleiro' then 'gk' when 'zagueiro' then 'def' when 'atacante' then 'atk' else 'mid' end as classe,
            (coalesce(a.gols, 0) + 0.75 * coalesce(a.assist, 0)) / nullif(a.n, 0) as c_ataque,
            case when a.v_tot > 0 then a.v_rec::numeric / a.v_tot end as share,
-           a.n::numeric / greatest(1, (select count(*) from public.jogos x where x.status = 'realizado' and x.data >= j.created_at::date)) as freq
+           a.n::numeric / greatest(1, (select count(*) from public.jogos x where x.status = 'realizado' and not x.competitivo and x.data >= j.created_at::date)) as freq
       from public.jogadores j left join agg a on a.jogador_id = j.id
   ),
   ref as (
@@ -1873,9 +1899,9 @@ drop trigger if exists jogos_scores on public.jogos;
 create trigger jogos_scores
   after update on public.jogos
   for each row
-  when (old.votacao_aberta is distinct from new.votacao_aberta or old.status is distinct from new.status
+  when (not new.competitivo and (old.votacao_aberta is distinct from new.votacao_aberta or old.status is distinct from new.status
         or old.placar_branco is distinct from new.placar_branco or old.placar_preto is distinct from new.placar_preto
-        or old.sorteio is distinct from new.sorteio)
+        or old.sorteio is distinct from new.sorteio))
   execute function public.jogos_atualiza_scores();
 
 -- Todo jogador novo já nasce com score 500 (sem esperar o próximo encerramento de partida)
@@ -1916,6 +1942,8 @@ revoke execute on function public.jogo_copiar_da_pelada() from public, anon, aut
 revoke execute on function public.push_enfileirar(uuid, text, text, text, text, text) from public, anon, authenticated;
 revoke execute on function public.push_gerar_agendados(timestamp) from public, anon, authenticated;
 revoke execute on function public.push_craque() from public, anon, authenticated;
+revoke execute on function public.tem_acesso_competitivo() from public, anon;
+grant execute on function public.tem_acesso_competitivo() to authenticated;
 revoke execute on function public.push_cadastro_aprovado() from public, anon, authenticated;
 revoke execute on function public.push_registrar(text, text, text, text) from public, anon;
 revoke execute on function public.push_teste() from public, anon;

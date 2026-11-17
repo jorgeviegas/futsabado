@@ -70,6 +70,7 @@ export default function Layout() {
         <NavLink to="/jogadores"><span>👥</span><span>Elenco</span></NavLink>
         <NavLink to="/rankings"><span>🏆</span><span>Rankings</span></NavLink>
         <NavLink to="/financeiro"><span>💰</span><span>Financeiro</span></NavLink>
+        {(isAdmin || eu?.competitivo) && <NavLink to="/competitivo"><span>🏅</span><span>Competitivo</span></NavLink>}
         {isAdmin && <NavLink to="/peladas"><span>📅</span><span>Peladas</span></NavLink>}
       </nav>
     </div>

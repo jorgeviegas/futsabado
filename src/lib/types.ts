@@ -18,6 +18,8 @@ export interface Jogador {
   tipo: TipoJogador
   is_admin: boolean
   ativo: boolean
+  /** Acesso à aba Competitivo (definido por um admin). */
+  competitivo: boolean
   created_at: string
 }
 
@@ -90,6 +92,13 @@ export interface Jogo {
   latitude: number | null
   longitude: number | null
   cidade: string | null
+  /** Jogo competitivo (contra outro time): avulso, fora dos rankings, do score e dos jogos da pelada. */
+  competitivo: boolean
+  adversario: string | null
+  competicao: string | null
+  /** Gols do nosso time e do adversário (só jogos competitivos). */
+  gols_pro: number | null
+  gols_contra: number | null
 }
 
 /** Goleiro com posição secundária escolhe se joga no gol ou na linha. */

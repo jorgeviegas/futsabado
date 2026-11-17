@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useExcluirJogador, useJogadores, useSalvarJogador, useScores } from '../lib/api'
+import { useDefinirCompetitivo, useExcluirJogador, useJogadores, useSalvarJogador, useScores } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { POSICOES, exibir } from '../lib/format'
 import { Avatar, Erro, Modal, Spinner } from '../components/ui'
@@ -53,6 +53,7 @@ export default function Jogadores() {
 
 function Linha({ j, euId, admin, score, onEditar }: { j: Jogador; euId?: string; admin: boolean; score?: number; onEditar: () => void }) {
   const podeEditar = admin || j.id === euId
+  const definir = useDefinirCompetitivo()
   return (
     <div className="card link" onClick={podeEditar ? onEditar : undefined}>
       <div className="linha">
@@ -70,6 +71,12 @@ function Linha({ j, euId, admin, score, onEditar }: { j: Jogador; euId?: string;
         {j.is_admin && <span className="chip grena">admin</span>}
         <span className="chip">{j.tipo}</span>
       </div>
+      {admin && j.ativo && (
+        <label className="check-comp" onClick={(e) => e.stopPropagation()}>
+          <input type="checkbox" checked={j.competitivo} disabled={definir.isPending} onChange={(e) => definir.mutate({ id: j.id, competitivo: e.target.checked })} />
+          <span>🏅 Acesso à aba Competitivo</span>
+        </label>
+      )}
     </div>
   )
 }

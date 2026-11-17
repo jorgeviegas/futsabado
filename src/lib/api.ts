@@ -40,6 +40,13 @@ export const useSalvarJogador = () =>
     [['jogadores'], ['eu']],
   )
 
+/** Admin: libera ou tira o acesso de um jogador à aba Competitivo. */
+export const useDefinirCompetitivo = () =>
+  useAcao(
+    async (v: { id: string; competitivo: boolean }) => ok(await supabase.from('jogadores').update({ competitivo: v.competitivo }).eq('id', v.id)),
+    [['jogadores'], ['eu']],
+  )
+
 export const useExcluirJogador = () =>
   useAcao(async (id: string) => ok(await supabase.from('jogadores').delete().eq('id', id)), [['jogadores']])
 
@@ -111,7 +118,7 @@ export const useProximoJogo = () =>
     queryKey: ['jogos', 'proximo'],
     queryFn: async () => {
       const rows = ok(
-        await supabase.from('jogos').select(JOGO_SELECT).eq('status', 'agendado').gte('data', hojeISO()).order('data').limit(1),
+        await supabase.from('jogos').select(JOGO_SELECT).eq('competitivo', false).eq('status', 'agendado').gte('data', hojeISO()).order('data').limit(1),
       ) as unknown as Jogo[]
       return rows[0] ?? null
     },
@@ -126,6 +133,7 @@ export const useJogoAnterior = () =>
         await supabase
           .from('jogos')
           .select(JOGO_SELECT)
+          .eq('competitivo', false)
           .or(`status.eq.realizado,and(data.lt.${hojeISO()},status.neq.cancelado)`)
           .order('data', { ascending: false })
           .limit(1),
@@ -140,7 +148,7 @@ export const useResultados = () =>
     queryKey: ['jogos', 'resultados'],
     queryFn: async () =>
       ok(
-        await supabase.from('jogos').select(JOGO_SELECT).eq('status', 'realizado').order('data', { ascending: false }).limit(30),
+        await supabase.from('jogos').select(JOGO_SELECT).eq('competitivo', false).eq('status', 'realizado').order('data', { ascending: false }).limit(30),
       ) as unknown as Jogo[],
   })
 
@@ -405,8 +413,8 @@ export const useCobrancas = (jogadorId?: string) => {
   const { data: base, isLoading: l3, error } = useQuery({
     queryKey: ['cobrancas', jogadorId ?? 'todos'],
     queryFn: async () => {
-      let jogaram = supabase.from('presencas').select(`jogador_id, funcao, ${JOGO_REF}`).eq('status', 'confirmado').eq('jogos.status', 'realizado')
-      let convidados = supabase.from('convidados').select(`id, nome, convidado_por, posicao, ${JOGO_REF}`).eq('jogos.status', 'realizado')
+      let jogaram = supabase.from('presencas').select(`jogador_id, funcao, ${JOGO_REF}`).eq('status', 'confirmado').eq('jogos.status', 'realizado').eq('jogos.competitivo', false)
+      let convidados = supabase.from('convidados').select(`id, nome, convidado_por, posicao, ${JOGO_REF}`).eq('jogos.status', 'realizado').eq('jogos.competitivo', false)
       let pagamentos = supabase.from('pagamentos').select('*')
       if (jogadorId) {
         jogaram = jogaram.eq('jogador_id', jogadorId)
@@ -470,7 +478,7 @@ export const useJogosVotacaoAberta = () =>
     queryKey: ['jogos', 'votacaoAberta'],
     queryFn: async () =>
       ok(
-        await supabase.from('jogos').select(JOGO_SELECT).eq('votacao_aberta', true).order('data', { ascending: false }),
+        await supabase.from('jogos').select(JOGO_SELECT).eq('competitivo', false).eq('votacao_aberta', true).order('data', { ascending: false }),
       ) as unknown as Jogo[],
   })
 
@@ -481,7 +489,7 @@ export const useJogosSemEncerrar = (habilitado: boolean) =>
     enabled: habilitado,
     queryFn: async () =>
       ok(
-        await supabase.from('jogos').select(JOGO_SELECT).eq('status', 'agendado').lt('data', hojeISO()).order('data'),
+        await supabase.from('jogos').select(JOGO_SELECT).eq('competitivo', false).eq('status', 'agendado').lt('data', hojeISO()).order('data'),
       ) as unknown as Jogo[],
   })
 
@@ -544,6 +552,7 @@ export const useJogosSemPlacar = (habilitado: boolean) =>
         await supabase
           .from('jogos')
           .select(JOGO_SELECT)
+          .eq('competitivo', false)
           .eq('status', 'realizado')
           .is('placar_branco', null)
           .gte('data', somaDias(hojeISO(), -14))
@@ -608,3 +617,41 @@ export const useSalvarPushPreferencias = (jogadorId: string | undefined) =>
     async (p: Partial<typeof PUSH_PADRAO>) => ok(await supabase.from('push_preferencias').upsert({ jogador_id: jogadorId, ...p })),
     [['pushPreferencias']],
   )
+
+// ---------- Jogos competitivos ----------
+/** Jogos competitivos do ano (só quem tem acesso à aba e admins enxergam; o banco filtra). */
+export const useJogosCompetitivos = (ano: number) =>
+  useQuery({
+    queryKey: ['competitivo', ano],
+    queryFn: async () =>
+      ok(
+        await supabase.from('jogos').select(JOGO_SELECT).eq('competitivo', true)
+          .gte('data', `${ano}-01-01`).lte('data', `${ano}-12-31`).order('data').order('horario'),
+      ) as unknown as Jogo[],
+  })
+
+export type JogoCompetitivoForm = {
+  id?: string
+  adversario: string
+  competicao: string | null
+  data: string
+  horario: string
+  local: string | null
+  status: 'agendado' | 'realizado' | 'cancelado'
+  gols_pro: number | null
+  gols_contra: number | null
+}
+
+export const useSalvarJogoCompetitivo = () =>
+  useAcao(
+    async ({ id, ...j }: JogoCompetitivoForm) =>
+      ok(
+        id
+          ? await supabase.from('jogos').update(j).eq('id', id)
+          : await supabase.from('jogos').insert({ ...j, competitivo: true, pelada_id: null }),
+      ),
+    [['competitivo']],
+  )
+
+export const useExcluirJogoCompetitivo = () =>
+  useAcao(async (id: string) => ok(await supabase.from('jogos').delete().eq('id', id).eq('competitivo', true)), [['competitivo']])

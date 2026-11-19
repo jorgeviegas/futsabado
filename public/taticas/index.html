@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FutSábado – Organização Tática 2-3-1</title>
+<link rel="icon" href="../favicon.png">
+<meta name="theme-color" content="#3b0918">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0f1512; --panel:#17201b; --line:#26332c; --txt:#e8efe9; --mut:#9db0a4;
+    --gk:#f59e0b; --zag:#3b82f6; --vol:#a855f7; --ala:#14b8a6; --piv:#ef4444; --adv:#cbd5e1;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font-family:Inter,system-ui,sans-serif;line-height:1.5}
+  header{padding:28px 20px 8px;max-width:1150px;margin:auto}
+  h1{font-family:"Barlow Condensed",sans-serif;font-weight:800;font-size:clamp(30px,5vw,46px);margin:0;letter-spacing:.5px;text-transform:uppercase}
+  h1 span{color:#4ade80}
+  header p{color:var(--mut);margin:6px 0 0;max-width:720px}
+  main{max-width:1150px;margin:auto;padding:12px 20px 40px}
+  .board{display:grid;grid-template-columns:minmax(280px,440px) 1fr;gap:24px;align-items:start}
+  @media(max-width:820px){.board{grid-template-columns:1fr}}
+  .fieldwrap{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:12px}
+  svg{width:100%;height:auto;display:block}
+  .player{cursor:pointer;transition:transform 1.1s cubic-bezier(.45,.05,.25,1)}
+  .player .ring{fill:none;stroke:#fff;stroke-width:2.5}
+  .player .num{paint-order:stroke;stroke:#0b0b0b;stroke-width:2.5px;stroke-linejoin:round}
+  .player text{font-family:"Barlow Condensed",sans-serif;font-weight:800;font-size:15px;fill:#fff;text-anchor:middle;dominant-baseline:central;pointer-events:none}
+  .player .lbl{font-family:Inter;font-weight:600;font-size:10px;fill:#e8efe9;dominant-baseline:auto}
+  .player.dim{opacity:.3}
+  .player.hl .ring{stroke:#facc15;stroke-width:4}
+  #ball{transition:transform .7s ease-in-out}
+  .arrow{fill:none;stroke-width:2.5;opacity:0;transition:opacity .5s}
+  .arrow.show{opacity:.95}
+  .arrow.pass{stroke:#facc15;stroke-dasharray:6 5}
+  .arrow.run{stroke:#fff}
+  .adv{transition:opacity .6s, transform 1.1s cubic-bezier(.45,.05,.25,1)}
+  .phases{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+  .phases button,.ctrl button{font:600 14px Inter;background:#1e2a23;color:var(--txt);border:1px solid var(--line);padding:9px 14px;border-radius:999px;cursor:pointer}
+  .phases button.on{background:#4ade80;color:#0b1a10;border-color:#4ade80}
+  .ctrl{display:flex;gap:8px;margin:10px 0 0;flex-wrap:wrap}
+  .ctrl button{background:transparent}
+  .phaseinfo{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px 20px}
+  .phaseinfo h2{font-family:"Barlow Condensed";font-size:28px;margin:0 0 4px;text-transform:uppercase}
+  .phaseinfo .sub{color:var(--mut);margin:0 0 12px}
+  .phaseinfo ol{margin:0;padding-left:20px}
+  .phaseinfo li{margin:6px 0}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:14px;font-size:13px;color:var(--mut)}
+  .legend i{display:inline-block;width:22px;height:0;border-top:2.5px solid #fff;vertical-align:middle;margin-right:6px}
+  .legend i.p{border-top:2.5px dashed #facc15}
+  .legend b{display:inline-block;width:12px;height:12px;border-radius:50%;vertical-align:middle;margin-right:6px}
+  h3.sec{font-family:"Barlow Condensed";font-size:30px;text-transform:uppercase;margin:40px 0 4px}
+  .sec + p{color:var(--mut);margin:0 0 16px}
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px;border-top:5px solid var(--c);cursor:pointer;transition:transform .15s, box-shadow .15s}
+  .card:hover{transform:translateY(-2px)}
+  .card.sel{box-shadow:0 0 0 2px var(--c)}
+  .card .tag{display:inline-flex;align-items:center;gap:8px;font-family:"Barlow Condensed";font-weight:800;font-size:22px;text-transform:uppercase}
+  .card .role{color:var(--mut);font-size:13.5px;margin:4px 0 10px}
+  .card .quem{font-size:13.5px;margin:0 0 10px;color:var(--mut)}
+  .card .quem b{color:var(--txt)}
+  .card .quem div{padding:1px 0}
+  .card ul{list-style:none;padding:0;margin:0}
+  .card li{display:flex;gap:10px;padding:7px 0;border-top:1px solid var(--line);font-size:14.5px}
+  .card li::before{content:"✓";color:var(--c);font-weight:800}
+  .card .never{margin-top:10px;font-size:13px;background:#2a1717;color:#fca5a5;padding:8px 10px;border-radius:10px}
+  .rules{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+  .rule{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+  .rule strong{display:block;font-family:"Barlow Condensed";font-size:20px;text-transform:uppercase;color:#4ade80}
+  .rule span{font-size:14px;color:var(--mut)}
+  .squad{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
+  .pl{display:flex;gap:12px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+  .pl svg{width:46px;height:46px;flex:none}
+  .pl strong{display:block;font-family:"Barlow Condensed";font-size:20px;text-transform:uppercase;line-height:1.1}
+  .pl small{color:var(--mut);font-size:13px}
+  .pl .tit{display:inline-block;font-size:11px;font-weight:600;background:#4ade80;color:#0b1a10;border-radius:999px;padding:1px 8px;margin-left:6px;vertical-align:middle;text-transform:none;font-family:Inter}
+</style>
+</head>
+<body>
+<header>
+  <h1>FutSábado · <span>2-3-1</span> organizado</h1>
+  <p>Prancheta do time: escolha uma fase do jogo para ver a movimentação animada, e clique em um jogador (ou num card) para ver as tarefas da posição.</p>
+</header>
+<main>
+  <div class="board">
+    <div class="fieldwrap">
+      <svg id="field" viewBox="0 0 400 600" aria-label="Campo de fut7 com o posicionamento do time">
+        <defs>
+          <pattern id="grass" width="400" height="75" patternUnits="userSpaceOnUse">
+            <rect width="400" height="37.5" fill="#2f7a43"/><rect y="37.5" width="400" height="37.5" fill="#2b7240"/>
+          </pattern>
+          <clipPath id="camisa"><circle r="15"/></clipPath>
+          <marker id="ahW" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#fff"/></marker>
+          <marker id="ahY" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#facc15"/></marker>
+        </defs>
+        <rect width="400" height="600" fill="url(#grass)" rx="10"/>
+        <g fill="none" stroke="rgba(255,255,255,.75)" stroke-width="2">
+          <rect x="15" y="15" width="370" height="570"/>
+          <line x1="15" y1="300" x2="385" y2="300"/>
+          <circle cx="200" cy="300" r="45"/>
+          <rect x="110" y="15" width="180" height="80"/>
+          <rect x="110" y="505" width="180" height="80"/>
+          <rect x="165" y="3" width="70" height="12"/>
+          <rect x="165" y="585" width="70" height="12"/>
+        </g>
+        <circle cx="200" cy="300" r="3" fill="#fff"/>
+        <text x="62" y="578" text-anchor="middle" font-size="9" fill="rgba(255,255,255,.6)" font-family="Inter">NOSSO GOL</text>
+        <text x="200" y="40" text-anchor="middle" font-size="9" fill="rgba(255,255,255,.6)" font-family="Inter" dy="-12">ATAQUE ↑</text>
+        <g id="arrows"></g>
+        <g id="advs"></g>
+        <g id="players"></g>
+        <g id="ball"><circle r="6" fill="#fff" stroke="#111" stroke-width="1.5"/></g>
+      </svg>
+      <div class="legend">
+        <span><i></i>movimento</span><span><i class="p"></i>passe</span><span><b style="background:var(--adv)"></b>adversário</span>
+      </div>
+    </div>
+    <div>
+      <div class="phases" id="phases"></div>
+      <div class="phaseinfo" id="info"></div>
+      <div class="ctrl">
+        <button id="replay">↻ Repetir animação</button>
+        <button id="auto">▶ Passar todas as fases</button>
+      </div>
+    </div>
+  </div>
+
+  <h3 class="sec">Tarefas por posição</h3>
+  <p>Cada jogador tem 4 tarefas fixas. Se cada um cumprir as suas, o time deixa de ficar bagunçado.</p>
+  <div class="cards" id="cards"></div>
+
+  <h3 class="sec">Elenco</h3>
+  <p>Quem joga em cada posição. Os titulares aparecem em destaque.</p>
+  <div class="squad" id="squad"></div>
+
+  <h3 class="sec">Regras do time (valem para todos)</h3>
+  <p>Combinados simples que mantêm o 2-3-1 de pé durante o jogo inteiro.</p>
+  <div class="rules">
+    <div class="rule"><strong>Time curto</strong><span>Do zagueiro ao pivô, no máximo meio campo de distância. Se o time esticar, a bola some no meio.</span></div>
+    <div class="rule"><strong>Perdeu, pressiona 5 segundos</strong><span>Quem está perto da bola aperta na hora; os outros voltam. Passou de 5s sem recuperar, todo mundo recompõe.</span></div>
+    <div class="rule"><strong>Sempre 3 atrás da bola</strong><span>Os 2 zagueiros e o volante nunca passam da linha da bola ao mesmo tempo.</span></div>
+    <div class="rule"><strong>Fala o tempo todo</strong><span>"Sobe", "vira", "tem gente", "segura". Goleiro e volante são os que mais falam.</span></div>
+    <div class="rule"><strong>Lado da bola cheio, outro lado aberto</strong><span>Na defesa, o time desliza para o lado da bola. No ataque, o ala do lado oposto fica aberto para a virada.</span></div>
+  </div>
+</main>
+
+<script>
+// ====== ELENCO — edite aqui ======
+// Números de camisa (preencha: 'Dudu': 1, ...). Enquanto não houver número, o ícone mostra a inicial do nome.
+const NUMEROS={};
+// Quem joga em cada posição (o primeiro de cada lista NÃO é necessariamente o titular: veja TITULAR).
+const ELENCO={
+ GK:['Dudu'],
+ ZE:['Jonathan','Jorge','Vine'],
+ ZD:['Vine','Gustavo S.'],
+ VOL:['Jorge','Juliano','Neves'],
+ AD:['Weslei','Juliano'],
+ AE:['Neves','Henrique'],
+ PIV:['Igor','Henrique','Gustavo']
+};
+// Time titular: uma pessoa por posição.
+const TITULAR={GK:'Dudu',ZE:'Jonathan',ZD:'Gustavo S.',VOL:'Jorge',AE:'Neves',AD:'Weslei',PIV:'Igor'};
+// =================================
+const COLORS={GK:'var(--gk)',ZE:'var(--zag)',ZD:'var(--zag)',VOL:'var(--vol)',AE:'var(--ala)',AD:'var(--ala)',PIV:'var(--piv)'};
+const POSNOME={GK:'Goleiro',ZE:'Zagueiro E',ZD:'Zagueiro D',VOL:'Volante',AE:'Ala E',AD:'Ala D',PIV:'Pivô'};
+const numeroDe=n=>NUMEROS[n]!=null?String(NUMEROS[n]):n[0].toUpperCase();
+// camisa do FutSábado: preta com a listra grená no meio e número branco
+const camisaSVG=(n,r=15)=>`<g clip-path="url(#camisa)"><circle r="15" fill="#0b0b0b"/><rect x="-5.5" y="-15" width="11" height="30" fill="#8c1d3f"/></g><circle class="ring" r="15"/><text class="num">${numeroDe(n)}</text>`;
+const ROLEOF={GK:'gk',ZE:'zag',ZD:'zag',VOL:'vol',AE:'ala',AD:'ala',PIV:'piv'};
+const SLOTS_DO_ROLE={gk:['GK'],zag:['ZE','ZD'],vol:['VOL'],ala:['AE','AD'],piv:['PIV']};
+// coordenadas em % (x: 0 esquerda→100 direita, y: 0 ataque→100 nosso gol)
+const P=(x,y)=>[15+x*3.7,15+y*5.7];
+
+const PHASES=[
+ {id:'base',name:'Posição base',sub:'Onde cada um fica quando o jogo "para" (lateral, tiro de meta, reinício).',
+  pos:{GK:[50,95],ZE:[30,78],ZD:[70,78],VOL:[50,63],AE:[12,52],AD:[88,52],PIV:[50,30]},
+  ball:[[50,92]], arrows:[], adv:[],
+  pts:['Duas linhas bem desenhadas: 2 atrás, 3 no meio, 1 na frente.','O volante fica no meio, logo à frente dos zagueiros — é a "dobradiça" entre defesa e ataque.','Alas abertos perto da lateral; pivô centralizado, de frente para o gol adversário.']},
+ {id:'saida',name:'Saída de bola',sub:'Goleiro com a bola. Objetivo: sair jogando curto, sem chutão.',
+  pos:{GK:[50,95],ZE:[14,84],ZD:[86,84],VOL:[50,72],AE:[6,56],AD:[94,56],PIV:[50,40]},
+  ball:[[50,92],[86,84],[50,72],[6,56]],
+  arrows:[['run','ZE',[30,78],[14,84]],['run','ZD',[70,78],[86,84]],['run','VOL',[50,63],[50,72]],['pass',null,[50,92],[86,84]],['pass',null,[86,84],[50,72]],['pass',null,[50,72],[6,56]],['run','PIV',[50,30],[50,40]]],
+  adv:[[40,55],[62,58],[50,35]],
+  pts:['Zagueiros abrem nos cantos da área: viram opção de passe para o goleiro.','Volante desce e aparece de frente, no meio dos dois — é o primeiro "dono" da bola.','Alas grudam na lateral para abrir o campo; o volante vira o jogo para o ala livre.','Pivô vem um pouco para perto, como opção de bola longa segura.']},
+ {id:'ataque',name:'Ataque organizado',sub:'Bola no campo adversário. O pivô segura, o time chega.',
+  pos:{GK:[50,86],ZE:[30,60],ZD:[70,60],VOL:[50,46],AE:[10,26],AD:[72,16],PIV:[50,20]},
+  ball:[[50,46],[50,20],[10,26],[72,16]],
+  arrows:[['pass',null,[50,46],[50,20]],['pass',null,[50,20],[10,26]],['run','AE',[12,52],[10,26]],['run','AD',[88,52],[72,16]],['pass',null,[10,26],[72,16]]],
+  adv:[[42,24],[58,28],[45,12]],
+  pts:['Pivô recebe de costas, protege a bola e espera o time subir.','Alas sobem: o do lado da bola dá apoio, o do lado oposto ataca a área na diagonal.','Volante fica atrás da linha da bola para rebote e cobertura.','Zagueiros sobem até perto do meio — nunca os dois passando do volante.']},
+ {id:'perdeu',name:'Perdeu a bola',sub:'Transição defensiva: os primeiros 5 segundos.',
+  pos:{GK:[50,90],ZE:[36,70],ZD:[64,72],VOL:[44,50],AE:[20,34],AD:[66,44],PIV:[34,28]},
+  ball:[[26,32]],
+  arrows:[['run','AE',[10,26],[20,34]],['run','PIV',[50,20],[34,28]],['run','VOL',[50,46],[44,50]],['run','AD',[72,16],[66,44]],['run','ZE',[30,60],[36,70]],['run','ZD',[70,60],[64,72]]],
+  adv:[[26,32],[55,40],[48,62]],
+  pts:['Quem está mais perto (ala e pivô) pressiona na hora — fecha o passe para frente.','Volante NÃO dá o bote: fica na frente dos zagueiros e protege o meio.','Zagueiros recuam um passo e ficam em linha, vigiando o atacante deles.','O ala do outro lado volta correndo pelo meio, não pela lateral.']},
+ {id:'defesa',fromBase:true,name:'Defesa (bloco)',sub:'Adversário com a bola trocando passes. Time compacto e fechado.',
+  pos:{GK:[52,93],ZE:[44,80],ZD:[68,81],VOL:[54,66],AE:[34,62],AD:[78,58],PIV:[60,46]},
+  ball:[[78,38]],
+  arrows:[['run','PIV',[50,30],[60,46]],['run','AD',[88,52],[78,58]]],
+  adv:[[78,38],[50,40],[30,50],[62,72]],
+  pts:['O time inteiro desliza para o lado da bola — o lado oposto pode ficar livre.','Pivô é o 1º defensor: fecha o passe para o meio e empurra a bola para a lateral.','Ala do lado da bola marca quem está com ela; o outro ala fecha por dentro.','Zagueiro mais perto marca o atacante; o outro faz a cobertura atrás.']}
+];
+
+const ROLES={
+ gk:{name:'Goleiro',nums:['1'],c:'var(--gk)',role:'Último defensor e primeiro atacante. É quem comanda o time de trás.',
+   tasks:['Comandar a defesa falando o tempo todo: "sobe", "sai", "cobre", "tem gente nas costas".','Saída de bola rápida e curta: mão ou pé para o zagueiro aberto ou para o volante.','Jogar adiantado e sair do gol nas bolas enfiadas nas costas dos zagueiros.','Na bola parada contra, organizar a barreira e dizer quem marca quem.'],
+   never:'Evitar: chutão sem direção quando há um zagueiro livre.'},
+ zag:{name:'Zagueiros',nums:['3','4'],c:'var(--zag)',role:'A dupla que segura o time. Um ataca a bola, o outro cobre.',
+   tasks:['Na saída de bola, abrir nos cantos da área para receber do goleiro.','Nunca subirem juntos: quando um sai para dar o bote, o outro fica na cobertura.','Marcar o pivô adversário colado por trás, sem deixar ele girar de frente.','Na dúvida, jogar simples: passe para o volante ou bola na lateral. Driblar na área, nunca.'],
+   never:'Evitar: os dois correrem atrás da mesma bola.'},
+ vol:{name:'Volante',nums:['5'],c:'var(--vol)',role:'O meia defensivo. Liga a defesa ao ataque e protege a frente da área.',
+   tasks:['Na saída de bola, aparecer sempre de frente, entre os zagueiros, pedindo a bola.','Distribuir o jogo: receber e virar para o lado que estiver livre, com 1 ou 2 toques.','No ataque, ficar atrás da linha da bola: é o seguro do time contra o contra-ataque.','Ao perder a bola, segurar o meio e retardar o adversário (não dar bote no desespero).'],
+   never:'Evitar: entrar na área adversária e deixar os zagueiros sozinhos.'},
+ ala:{name:'Alas',nums:['7','8'],c:'var(--ala)',role:'Os que mais correm: dão largura no ataque e fecham os lados na defesa.',
+   tasks:['Na saída de bola, abrir colado na lateral para dar opção ao volante e aos zagueiros.','No ataque, o ala do lado da bola dá apoio; o do lado oposto entra na área na diagonal.','Regra de ouro: perdeu a bola, voltou. Recompor até a linha do volante.','Na defesa, marcar o ala/lateral adversário do seu lado; se a bola está do outro lado, fechar por dentro.'],
+   never:'Evitar: os dois alas no ataque ao mesmo tempo sem ninguém do volante para trás.'},
+ piv:{name:'Pivô',nums:['9'],c:'var(--piv)',role:'A referência na frente. Segura a bola, faz o time jogar e é o primeiro a marcar.',
+   tasks:['Segurar a bola de costas (corpo entre a bola e o marcador) até o time chegar.','Fazer a parede: tabelar com alas e volante e se virar para finalizar quando der.','Atacar o espaço nas costas da zaga quando o volante ou um ala estiver de frente.','Ser o 1º defensor: pressionar o zagueiro adversário e empurrar a bola para a lateral.'],
+   never:'Evitar: ficar parado esperando a bola e não voltar para marcar.'}
+};
+
+const svgNS='http://www.w3.org/2000/svg';
+const playersG=document.getElementById('players'),arrowsG=document.getElementById('arrows'),advG=document.getElementById('advs'),ball=document.getElementById('ball');
+const els={};
+Object.keys(TITULAR).forEach(k=>{
+  const g=document.createElementNS(svgNS,'g');g.classList.add('player');g.dataset.k=k;
+  g.innerHTML=`<title>${TITULAR[k]} — ${POSNOME[k]}</title>${camisaSVG(TITULAR[k])}<text class="lbl" y="29" text-anchor="middle">${TITULAR[k]}</text>`;
+  g.addEventListener('click',()=>selectRole(ROLEOF[k],true));
+  playersG.appendChild(g);els[k]=g;
+});
+const tr=(el,xy)=>{const [x,y]=P(...xy);el.style.transform=`translate(${x}px,${y}px)`;};
+
+let timers=[],cur=0,autoT=null,selRole=null;
+function clearT(){timers.forEach(clearTimeout);timers=[];}
+function show(i){
+  clearT();cur=i;const ph=PHASES[i];
+  document.querySelectorAll('#phases button').forEach((b,j)=>b.classList.toggle('on',j===i));
+  document.getElementById('info').innerHTML=`<h2>${ph.name}</h2><p class="sub">${ph.sub}</p><ol>${ph.pts.map(p=>`<li>${p}</li>`).join('')}</ol>`;
+  // posição inicial = fase anterior (ou base), depois anima
+  const from=(i>0&&!ph.fromBase)?PHASES[i-1].pos:PHASES[0].pos;
+  Object.keys(els).forEach(k=>{els[k].style.transition='none';tr(els[k],from[k]);});
+  ball.style.transition='none';tr(ball,ph.ball[0]);
+  arrowsG.innerHTML='';advG.innerHTML='';
+  ph.adv.forEach(a=>{const c=document.createElementNS(svgNS,'g');c.classList.add('adv');c.style.opacity=0;
+    c.innerHTML='<circle r="11" fill="var(--adv)" stroke="#334155" stroke-width="2"/><path d="M-5 -5L5 5M5 -5L-5 5" stroke="#334155" stroke-width="2"/>';tr(c,a);advG.appendChild(c);});
+  ph.arrows.forEach(([t,_,a,b])=>{const [x1,y1]=P(...a),[x2,y2]=P(...b);const l=document.createElementNS(svgNS,'path');
+    const mx=(x1+x2)/2+(t==='run'?(y2-y1)*.12:0),my=(y1+y2)/2-(t==='run'?(x2-x1)*.12:0);
+    l.setAttribute('d',`M${x1} ${y1} Q${mx} ${my} ${x2} ${y2}`);l.setAttribute('class','arrow '+t);
+    l.setAttribute('marker-end',t==='pass'?'url(#ahY)':'url(#ahW)');arrowsG.appendChild(l);});
+  void playersG.getBoundingClientRect();
+  timers.push(setTimeout(()=>{
+    Object.keys(els).forEach(k=>{els[k].style.transition='';tr(els[k],ph.pos[k]);});
+    advG.querySelectorAll('.adv').forEach(c=>c.style.opacity=1);
+    arrowsG.querySelectorAll('.arrow.run').forEach(a=>a.classList.add('show'));
+    ball.style.transition='';
+  },250));
+  const passes=[...arrowsG.querySelectorAll('.arrow.pass')];
+  ph.ball.slice(1).forEach((b,j)=>timers.push(setTimeout(()=>{tr(ball,b);if(passes[j])passes[j].classList.add('show');},1400+j*900)));
+  applySel();
+}
+function selectRole(r,scroll){
+  selRole=selRole===r?null:r;applySel();
+  if(selRole&&scroll){const c=document.querySelector(`.card[data-r="${r}"]`);c&&c.scrollIntoView({behavior:'smooth',block:'center'});}
+}
+function applySel(){
+  Object.keys(els).forEach(k=>{const on=ROLEOF[k]===selRole;els[k].classList.toggle('hl',on);els[k].classList.toggle('dim',!!selRole&&!on);});
+  document.querySelectorAll('.card').forEach(c=>c.classList.toggle('sel',c.dataset.r===selRole));
+}
+const phasesEl=document.getElementById('phases');
+PHASES.forEach((p,i)=>{const b=document.createElement('button');b.textContent=(i+1)+'. '+p.name;b.onclick=()=>{stopAuto();show(i);};phasesEl.appendChild(b);});
+const cardsEl=document.getElementById('cards');
+Object.entries(ROLES).forEach(([r,o])=>{const d=document.createElement('div');d.className='card';d.dataset.r=r;d.style.setProperty('--c',o.c);
+  const quem=SLOTS_DO_ROLE[r].map(sl=>`<div>${SLOTS_DO_ROLE[r].length>1?`<span>${POSNOME[sl]}:</span> `:''}${ELENCO[sl].map(n=>n===TITULAR[sl]?`<b>${n}</b>`:n).join(' · ')}</div>`).join('');
+  d.innerHTML=`<div class="tag">${o.name}</div><div class="role">${o.role}</div><div class="quem">${quem}</div><ul>${o.tasks.map(t=>`<li>${t}</li>`).join('')}</ul><div class="never">${o.never}</div>`;
+  d.onclick=()=>{selectRole(r,false);document.getElementById('field').scrollIntoView({behavior:'smooth',block:'center'});};cardsEl.appendChild(d);});
+// elenco: cada jogador com as posições em que atua
+const jogadores={};
+Object.entries(ELENCO).forEach(([sl,lista])=>lista.forEach(n=>{(jogadores[n]=jogadores[n]||[]).push(sl);}));
+const titulares=new Set(Object.values(TITULAR));
+const squadEl=document.getElementById('squad');
+Object.entries(jogadores).sort((a,b)=>(titulares.has(b[0])-titulares.has(a[0]))||a[0].localeCompare(b[0],'pt')).forEach(([n,sls])=>{
+  const d=document.createElement('div');d.className='pl';
+  d.innerHTML=`<svg viewBox="-19 -19 38 38">${camisaSVG(n)}</svg><div><strong>${n}${titulares.has(n)?'<span class="tit">titular</span>':''}</strong><small>${sls.map(sl=>POSNOME[sl]).join(' · ')}</small></div>`;
+  squadEl.appendChild(d);});
+document.getElementById('replay').onclick=()=>{stopAuto();show(cur);};
+const autoB=document.getElementById('auto');
+function stopAuto(){clearInterval(autoT);autoT=null;autoB.textContent='▶ Passar todas as fases';}
+autoB.onclick=()=>{if(autoT){stopAuto();return;}show(0);autoT=setInterval(()=>show((cur+1)%PHASES.length),5200);autoB.textContent='■ Parar';};
+show(0);
+</script>
+</body>
+</html>

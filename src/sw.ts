@@ -13,7 +13,7 @@ self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim(
 precacheAndRoute(self.__WB_MANIFEST)
 cleanupOutdatedCaches()
 // navegação sempre cai no index.html (SPA); chamadas ao Supabase nunca passam pelo cache
-registerRoute(new NavigationRoute(createHandlerBoundToURL('index.html'), { denylist: [/^\/rest\//, /^\/auth\//] }))
+registerRoute(new NavigationRoute(createHandlerBoundToURL('index.html'), { denylist: [/^\/rest\//, /^\/auth\//, /\/taticas(\/|$)/] }))
 
 interface DadosPush {
   titulo?: string

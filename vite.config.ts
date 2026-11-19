@@ -35,6 +35,7 @@ export default defineConfig({
       },
       injectManifest: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+        globIgnores: ['taticas/**'],   // página tática pública, fora do app
         rollupFormat: 'iife', // service worker clássico (compatível com navegadores mais antigos)
       },
     }),
